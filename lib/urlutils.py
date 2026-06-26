@@ -1,9 +1,13 @@
+import re
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
 XPath_not_found = '//*[@id="app-body"]/div/p'
+DATE_PATTERN = re.compile(r'^\d{2}\.\d{2}\.\d{4}$')
+x_path_start_date = '//*[@id="app-body"]/div/div[3]/div[4]/div/div[5]/p[1]'
 
 
 def check_optional_element_text(driver, xpath=XPath_not_found, expected_text="Текст для проверки", timeout=5):
@@ -22,12 +26,10 @@ def check_optional_element_text(driver, xpath=XPath_not_found, expected_text="Т
     print(f"Попытка найти элемент: {xpath}")
 
     try:
-        # Явное ожидание (Presence)
         element = WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((By.XPATH, xpath))
         )
 
-        # Элемент найден. Проверяем текст.
         actual_text = element.text.strip().lower()
         print(f"Элемент найден. Ожидаемый текст: '{expected_text}', Фактический текст: '{actual_text}'")
 
@@ -39,82 +41,105 @@ def check_optional_element_text(driver, xpath=XPath_not_found, expected_text="Т
             return True
 
     except TimeoutException:
-        # Элемент не найден в течение установленного времени.
-        # Это считается нормальным исходом согласно условию задачи.
         print(f"Элемент по пути '{xpath}' не был обнаружен. Всё нормально.")
         return True
 
     except Exception as e:
-        # Обработка других возможных ошибок Selenium (кроме Timeout)
         print(f"Произошла непредвиденная ошибка при поиске элемента: {e}")
         return False
 
 
-x_path_start_date = '//*[@id="app-body"]/div/div[3]/div[4]/div/div[5]/p[1]'
+def extract_date_text(element):
+    date_str = (element.get_attribute('value') or element.text or '').strip()
+    if DATE_PATTERN.match(date_str):
+        return date_str
+    return None
 
-def find_start_date_element(driver, xpath=x_path_start_date, timeout=12):
-    """
-    Попытаться найти элемент:
-    1) обычное ожидание presence/visibility в текущем контексте;
-    2) если не найдено — пробуем искать внутри <iframe> (итеративно);
-    3) если всё ещё не найдено — сохраняем скриншот и дамп HTML для отладки и возвращаем None.
-    """
 
-    XPath_not_found='//*[@id="app-body"]/div/p'
-    exists = check_optional_element_text(driver, XPath_not_found, expected_text="данная стратегия не существует",
-                                         timeout=6
-                                         )
+def _find_date_in_elements(elements):
+    for element in elements:
+        date_str = extract_date_text(element)
+        if date_str:
+            return element
+    return None
+
+
+def _search_in_iframes(driver, finder):
+    for iframe in driver.find_elements(By.TAG_NAME, 'iframe'):
+        try:
+            driver.switch_to.frame(iframe)
+            element = finder()
+            if element is not None:
+                return element
+        except WebDriverException:
+            pass
+        finally:
+            driver.switch_to.default_content()
+    return None
+
+
+def _save_debug_artifacts(driver, xpath):
+    try:
+        driver.save_screenshot('start_date_not_found.png')
+    except Exception:
+        pass
+    try:
+        with open('page_dump.html', 'w', encoding='utf-8') as f:
+            f.write(driver.page_source)
+    except Exception:
+        pass
+
+    print('Элемент с датой старта не найден. Последний XPath:', xpath)
+    try:
+        print('URL:', driver.current_url)
+        print('Title:', driver.title)
+    except Exception:
+        pass
+
+
+def find_start_date_element(driver, xpath=x_path_start_date, timeout=20):
+    """
+    Ищет дату старта стратегии на странице comon.ru.
+    Сначала — поле калькулятора доходности, затем блок createdParam, затем старый XPath.
+    """
+    exists = check_optional_element_text(
+        driver,
+        XPath_not_found,
+        expected_text="данная стратегия не существует",
+        timeout=6,
+    )
     if not exists:
         return None
-    try:
-        # сначала обычное явное ожидание (presence или visibility по необходимости)
-        el = WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.XPATH, xpath))
-        )
-        # при желании можно применять visibility_of_element_located вместо presence_of_element_located
-        return el
-    except TimeoutException:
-        # элемент не найден в текущем документе — попробуем поиск в iframe'ах
-        for iframe in driver.find_elements(By.TAG_NAME, 'iframe'):
-            try:
-                driver.switch_to.frame(iframe)
-                els = driver.find_elements(By.XPATH, xpath)
-                if els:
-                    return els[0]
-            except WebDriverException:
-                # некоторые iframe могут быть недоступны (cross-origin и т.п.)
-                pass
-            finally:
-                driver.switch_to.default_content()
 
-        # для отладки: сохранить скрин и дамп HTML
+    search_steps = [
+        ('profit-calc-date-from-input', lambda: _find_date_in_elements([
+            WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.ID, 'profit-calc-date-from-input')),
+            ),
+        ])),
+        ('createdParam', lambda: _find_date_in_elements(
+            driver.find_elements(By.XPATH, "//div[contains(@class,'createdParam')]//p"),
+        )),
+        (xpath, lambda: _find_date_in_elements([
+            WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, xpath)),
+            ),
+        ])),
+    ]
+
+    for step_name, finder in search_steps:
         try:
-            driver.save_screenshot('start_date_not_found.png')
-        except Exception:
-            pass
-        try:
-            with open('page_dump.html', 'w', encoding='utf-8') as f:
-                f.write(driver.page_source)
-        except Exception:
-            pass
+            element = finder()
+            if element is not None:
+                print('Дата старта найдена через:', step_name, '→', extract_date_text(element))
+                return element
+        except TimeoutException:
+            continue
 
-        # полезная отладочная информация
-        print('Элемент с XPath не найден:', xpath)
-        try:
-            print('URL:', driver.current_url)
-            print('Title:', driver.title)
-        except Exception:
-            pass
+        element = _search_in_iframes(driver, finder)
+        if element is not None:
+            print('Дата старта найдена в iframe через:', step_name, '→', extract_date_text(element))
+            return element
 
-        return None
-
-# # Использование:
-# date_info = find_start_date_element(driver)
-# if date_info is None:
-#     # обработка ситуации — лог, пропуск, повторная попытка и т.д.
-#     print('Не удалось получить date_info')
-# else:
-#     # элемент найден — можно читать текст
-#     start_date_text = date_info.text
-#     print('Start date:', start_date_text)
-
+    _save_debug_artifacts(driver, xpath)
+    return None

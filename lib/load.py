@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, time
 
 from lib.save import save_history_record_to_db
 from lib.strategy import StrategyInfo
-from lib.urlutils import find_start_date_element
+from lib.urlutils import extract_date_text, find_start_date_element
 from lib.utils import extract_percentage
 from models.strategies import History
 
@@ -254,30 +254,40 @@ def get_summ_perc(driver,last_perc):
     return perc,text.replace("₽", 'руб.')
 
 def load_strategy_history(driver, url, session, strategy_id, end_date_today):
-    max_datetime_from_db = session.query(func.max(History.datetime)).filter(History.strategy_id == strategy_id).scalar()
-    if max_datetime_from_db is None:
-        max_datetime_from_db = datetime(1970, 1, 1)
+    end_date_today = datetime.combine(end_date_today.date(), time.min)
+    last_in_db = session.query(func.max(History.datetime)).filter(
+        History.strategy_id == strategy_id,
+    ).scalar()
+    if last_in_db is None:
+        next_date = datetime(1970, 1, 1)
     else:
-        max_datetime_from_db=max_datetime_from_db+ timedelta(days=1)
-    max_datetime_from_db = datetime.combine(max_datetime_from_db, time.min)
-    if max_datetime_from_db+ timedelta(days=1)>=end_date_today:
+        next_date = datetime.combine(last_in_db + timedelta(days=1), time.min)
+    if next_date + timedelta(days=1) >= end_date_today:
+        if last_in_db is None:
+            print('Пропуск: нечего загружать до', end_date_today.strftime('%d.%m.%Y'))
+        else:
+            print(
+                f'История актуальна: последняя запись в БД {last_in_db:%d.%m.%Y}, '
+                f'конечная дата загрузки {end_date_today:%d.%m.%Y}',
+            )
         return False
 
-
-    print(f"Максимальное значение datetime для strategy_id={strategy_id}: {max_datetime_from_db}")
+    print(f"Загрузка с {next_date:%d.%m.%Y} для strategy_id={strategy_id}")
 
     x_locator_beg = '//*[@id="profit-calc-date-from-input"]'
-    x_locator_end = '// *[ @ id = "profit-calc-date-to-input"]'
+    x_locator_end = '//*[@id="profit-calc-date-to-input"]'
 
     # Переход по указанному URL
     driver.get(url)
 
-    x_path_start_date = '//*[@id="app-body"]/div/div[3]/div[4]/div/div[5]/p[1]'
-    #date_info = driver.find_element(By.XPATH, x_path_start_date)
     date_info = find_start_date_element(driver)
     if date_info is None:
+        print('Пропуск: не удалось найти дату старта стратегии на странице', url)
         return False
-    date_str = date_info.text
+    date_str = extract_date_text(date_info)
+    if date_str is None:
+        print('Пропуск: не удалось прочитать дату старта стратегии на странице', url)
+        return False
     date_format = "%d.%m.%Y"
     try:
         date_object = datetime.strptime(date_str, date_format)
@@ -286,8 +296,8 @@ def load_strategy_history(driver, url, session, strategy_id, end_date_today):
         exit(1)
 
     begin_date = date_object
-    if max_datetime_from_db > begin_date:
-        begin_date = max_datetime_from_db
+    if next_date > begin_date:
+        begin_date = next_date
     end_date = datetime.now()
     if end_date>end_date_today:
         end_date=end_date_today
