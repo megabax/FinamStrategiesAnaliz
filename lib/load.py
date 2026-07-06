@@ -253,26 +253,55 @@ def get_summ_perc(driver,last_perc):
         #raise Exception("Что-то не смогли взять сумму")
     return perc,text.replace("₽", 'руб.')
 
-def load_strategy_history(driver, url, session, strategy_id, end_date_today):
+def load_strategy_history(
+    driver,
+    url,
+    session,
+    strategy_id,
+    end_date_today,
+    from_date=None,
+    replace=False,
+):
     end_date_today = datetime.combine(end_date_today.date(), time.min)
-    last_in_db = session.query(func.max(History.datetime)).filter(
-        History.strategy_id == strategy_id,
-    ).scalar()
-    if last_in_db is None:
-        next_date = datetime(1970, 1, 1)
-    else:
-        next_date = datetime.combine(last_in_db + timedelta(days=1), time.min)
-    if next_date + timedelta(days=1) >= end_date_today:
-        if last_in_db is None:
-            print('Пропуск: нечего загружать до', end_date_today.strftime('%d.%m.%Y'))
-        else:
-            print(
-                f'История актуальна: последняя запись в БД {last_in_db:%d.%m.%Y}, '
-                f'конечная дата загрузки {end_date_today:%d.%m.%Y}',
-            )
-        return False
 
-    print(f"Загрузка с {next_date:%d.%m.%Y} для strategy_id={strategy_id}")
+    if replace:
+        if from_date is None:
+            raise ValueError('Для перезагрузки необходимо указать from_date')
+        begin_date = datetime.combine(from_date.date(), time.min) if isinstance(from_date, datetime) else datetime.combine(from_date, time.min)
+        # Верхняя граница цикла — exclusive, поэтому +1 день к включительной end-date
+        end_date = end_date_today + timedelta(days=1)
+        if begin_date >= end_date:
+            print(
+                f'Пропуск: начало периода {begin_date:%d.%m.%Y} не раньше конца {end_date_today:%d.%m.%Y}',
+            )
+            return False
+        print(
+            f'Перезагрузка strategy_id={strategy_id} за период '
+            f'{begin_date:%d.%m.%Y} — {end_date_today:%d.%m.%Y}',
+        )
+    else:
+        last_in_db = session.query(func.max(History.datetime)).filter(
+            History.strategy_id == strategy_id,
+        ).scalar()
+        if last_in_db is None:
+            next_date = datetime(1970, 1, 1)
+        else:
+            next_date = datetime.combine(last_in_db + timedelta(days=1), time.min)
+        if next_date + timedelta(days=1) >= end_date_today:
+            if last_in_db is None:
+                print('Пропуск: нечего загружать до', end_date_today.strftime('%d.%m.%Y'))
+            else:
+                print(
+                    f'История актуальна: последняя запись в БД {last_in_db:%d.%m.%Y}, '
+                    f'конечная дата загрузки {end_date_today:%d.%m.%Y}',
+                )
+            return False
+
+        print(f"Загрузка с {next_date:%d.%m.%Y} для strategy_id={strategy_id}")
+        begin_date = None
+        end_date = datetime.now()
+        if end_date > end_date_today:
+            end_date = end_date_today
 
     x_locator_beg = '//*[@id="profit-calc-date-from-input"]'
     x_locator_end = '//*[@id="profit-calc-date-to-input"]'
@@ -295,12 +324,20 @@ def load_strategy_history(driver, url, session, strategy_id, end_date_today):
         print("Неправильный формат даты")
         exit(1)
 
-    begin_date = date_object
-    if next_date > begin_date:
-        begin_date = next_date
-    end_date = datetime.now()
-    if end_date>end_date_today:
-        end_date=end_date_today
+    if replace:
+        if begin_date < date_object:
+            print(
+                f'Начало периода скорректировано: {begin_date:%d.%m.%Y} → {date_object:%d.%m.%Y} '
+                f'(дата старта стратегии)',
+            )
+            begin_date = date_object
+        if begin_date >= end_date:
+            print('Пропуск: после корректировки период пуст')
+            return False
+    else:
+        begin_date = date_object
+        if next_date > begin_date:
+            begin_date = next_date
 
     last_summ = None
     beg_set_date = begin_date
@@ -310,7 +347,7 @@ def load_strategy_history(driver, url, session, strategy_id, end_date_today):
             break
         set_period(driver, beg_set_date, end_set_date, x_locator_beg, x_locator_end)
         perc, perc_text = get_summ_perc(driver, last_summ)
-        save_history_record_to_db(strategy_id, beg_set_date, perc, perc_text)
+        save_history_record_to_db(strategy_id, beg_set_date, perc, perc_text, replace=replace)
         last_summ = perc
         beg_set_date = end_set_date
 

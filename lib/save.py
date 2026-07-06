@@ -1,4 +1,5 @@
 import sqlalchemy as sa
+from datetime import datetime
 from sqlalchemy.orm import sessionmaker
 
 from models.strategies import Base, Strategy, Kind, History
@@ -64,12 +65,32 @@ def history_record_existis(session,strategy_id,datetime):
     else:
         return False
 
-def save_history_record_to_db(strategy_id,datetime,perc,perc_text):
+def save_history_record_to_db(strategy_id, record_datetime, perc, perc_text, replace=False):
     session = create_session()
-    if not(history_record_existis(session,strategy_id,datetime)):
-        new_record = History(strategy_id=strategy_id, datetime=datetime, perc_income_day=perc, perc_text=perc_text)
-        session.add(new_record)
-        session.commit()
+    if isinstance(record_datetime, datetime):
+        record_date = record_datetime.date()
+    else:
+        record_date = record_datetime
+
+    existing_record = session.query(History).filter(
+        History.strategy_id == strategy_id,
+        History.datetime == record_date,
+    ).first()
+    if existing_record:
+        if replace:
+            existing_record.perc_income_day = perc
+            existing_record.perc_text = perc_text
+            session.commit()
+        return
+
+    new_record = History(
+        strategy_id=strategy_id,
+        datetime=record_date,
+        perc_income_day=perc,
+        perc_text=perc_text,
+    )
+    session.add(new_record)
+    session.commit()
 
 def create_session():
     engine = sa.create_engine(CONNECTION_STRING)
