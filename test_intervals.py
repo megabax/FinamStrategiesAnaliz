@@ -38,6 +38,17 @@ CSV_COLUMNS = [
 ]
 
 
+def parse_date_arg(value):
+    for fmt in ('%Y-%m-%d', '%d.%m.%Y'):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    raise argparse.ArgumentTypeError(
+        f'Неверный формат даты: {value}. Используйте ГГГГ-ММ-ДД или ДД.ММ.ГГГГ',
+    )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description='Сверка накопительного итога по интервалам истории одной стратегии',
@@ -53,6 +64,20 @@ def parse_args():
         type=int,
         required=True,
         help='Размер интервала в днях (например, 200)',
+    )
+    parser.add_argument(
+        '--from-date',
+        type=parse_date_arg,
+        default=None,
+        metavar='ДАТА',
+        help='Начало периода сверки (ГГГГ-ММ-ДД или ДД.ММ.ГГГГ). По умолчанию — с первой записи',
+    )
+    parser.add_argument(
+        '--to-date',
+        type=parse_date_arg,
+        default=None,
+        metavar='ДАТА',
+        help='Конец периода сверки (ГГГГ-ММ-ДД или ДД.ММ.ГГГГ). По умолчанию — до последней записи',
     )
     parser.add_argument(
         '--tolerance',
@@ -81,13 +106,17 @@ def wait_for_profit_calculator(driver, timeout=20):
     )
 
 
-def load_history_rows(session, strategy_id):
-    return (
+def load_history_rows(session, strategy_id, from_date=None, to_date=None):
+    query = (
         session.query(History)
         .filter(History.strategy_id == strategy_id)
         .order_by(History.datetime)
-        .all()
     )
+    if from_date is not None:
+        query = query.filter(History.datetime >= from_date)
+    if to_date is not None:
+        query = query.filter(History.datetime <= to_date)
+    return query.all()
 
 
 def split_into_chunks(rows, chunk_size):
@@ -114,15 +143,25 @@ def main():
     args = parse_args()
     if args.days <= 0:
         raise SystemExit('Размер интервала --days должен быть больше 0')
+    if args.from_date and args.to_date and args.from_date > args.to_date:
+        raise SystemExit('--from-date не может быть позже --to-date')
 
     session = create_session()
     strategy = session.query(Strategy).filter(Strategy.number == args.number).first()
     if strategy is None:
         raise SystemExit(f'Стратегия с номером {args.number} не найдена в базе.')
 
-    history_rows = load_history_rows(session, strategy.id)
+    history_rows = load_history_rows(
+        session, strategy.id, args.from_date, args.to_date,
+    )
     if not history_rows:
-        raise SystemExit(f'У стратегии №{args.number} нет записей истории.')
+        if args.from_date or args.to_date:
+            beg = args.from_date.strftime('%d.%m.%Y') if args.from_date else '…'
+            end = args.to_date.strftime('%d.%m.%Y') if args.to_date else '…'
+            period_hint = f' в периоде {beg} — {end}'
+        else:
+            period_hint = ''
+        raise SystemExit(f'У стратегии №{args.number} нет записей истории{period_hint}.')
 
     chunks = list(split_into_chunks(history_rows, args.days))
     intervals_total = len(chunks)
@@ -130,7 +169,12 @@ def main():
 
     print('--- Сверка по интервалам ---')
     print(f'Стратегия №{strategy.number}: {strategy.name}')
-    print(f'Записей в истории: {len(history_rows)}, интервал: {args.days} дн., сравнений: {intervals_total}')
+    period_from = history_rows[0].datetime
+    period_to = history_rows[-1].datetime
+    print(
+        f'Период: {period_from:%d.%m.%Y} — {period_to:%d.%m.%Y}, '
+        f'записей: {len(history_rows)}, интервал: {args.days} дн., сравнений: {intervals_total}',
+    )
     print(f'Протокол: {output_path}')
 
     driver = webdriver.Chrome()
