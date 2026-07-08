@@ -1,3 +1,4 @@
+import argparse
 import csv
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -35,6 +36,44 @@ CSV_COLUMNS = [
     'error',
 ]
 
+MISMATCHES_COLUMNS = [
+    'rank',
+    'strategy_id',
+    'number',
+    'name',
+    'depo',
+    'depo_real',
+    'diff',
+    'period_beg',
+    'period_end',
+    'days_count',
+    'link',
+]
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description='Сверка накопительной доходности стратегий в БД с калькулятором comon.ru',
+    )
+    parser.add_argument(
+        '-m', '--mismatches',
+        nargs='?',
+        const='auto',
+        default=None,
+        metavar='ФАЙЛ',
+        help=(
+            'Записать CSV со стратегиями с расхождением, отсортированный по убыванию diff. '
+            'Без пути — reports/mismatches_<дата>.csv'
+        ),
+    )
+    parser.add_argument(
+        '--tolerance',
+        type=float,
+        default=MATCH_TOLERANCE,
+        help=f'Допустимая абсолютная разница множителей (по умолчанию {MATCH_TOLERANCE})',
+    )
+    return parser.parse_args()
+
 
 def to_datetime(value):
     if isinstance(value, datetime):
@@ -71,8 +110,38 @@ def make_protocol_path():
     return PROTOCOL_DIR / f'verify_protocol_{stamp}.csv'
 
 
-def write_protocol_row(writer, row_data):
-    writer.writerow(row_data)
+def make_mismatches_path(arg_value):
+    PROTOCOL_DIR.mkdir(exist_ok=True)
+    if arg_value == 'auto':
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return PROTOCOL_DIR / f'mismatches_{stamp}.csv'
+    return Path(arg_value)
+
+
+def write_mismatches_csv(path, mismatches):
+    mismatches_sorted = sorted(
+        mismatches,
+        key=lambda item: float(item['diff']),
+        reverse=True,
+    )
+    with path.open('w', encoding='utf-8-sig', newline='') as mismatches_file:
+        writer = csv.DictWriter(mismatches_file, fieldnames=MISMATCHES_COLUMNS, delimiter=';')
+        writer.writeheader()
+        for rank, item in enumerate(mismatches_sorted, start=1):
+            writer.writerow({
+                'rank': rank,
+                'strategy_id': item['strategy_id'],
+                'number': item['number'],
+                'name': item['name'],
+                'depo': item['depo'],
+                'depo_real': item['depo_real'],
+                'diff': item['diff'],
+                'period_beg': item['period_beg'],
+                'period_end': item['period_end'],
+                'days_count': item['days_count'],
+                'link': item['link'],
+            })
+    return len(mismatches_sorted)
 
 
 def format_result_line(name, depo, depo_real, diff, status, period_beg, period_end, days_count):
@@ -84,6 +153,7 @@ def format_result_line(name, depo, depo_real, diff, status, period_beg, period_e
 
 
 def main():
+    args = parse_args()
     session = create_session()
 
     query = (
@@ -107,11 +177,15 @@ def main():
     results = query.all()
     total = len(results)
     protocol_path = make_protocol_path()
+    mismatches_path = make_mismatches_path(args.mismatches) if args.mismatches else None
+    mismatches = []
 
     driver = webdriver.Chrome()
     print('--- Результаты проверки ---')
     print(f'Стратегий к проверке: {total}')
     print(f'Протокол: {protocol_path}')
+    if mismatches_path is not None:
+        print(f'Список расхождений: {mismatches_path}')
 
     try:
         with protocol_path.open('w', encoding='utf-8-sig', newline='') as protocol_file:
@@ -148,7 +222,7 @@ def main():
                             'matched': 'нет',
                             'error': 'нет записей истории',
                         }
-                        write_protocol_row(writer, record)
+                        writer.writerow(record)
                         protocol_file.flush()
                         print(f'{row.name}: нет записей истории')
                         continue
@@ -170,14 +244,14 @@ def main():
                             'matched': 'нет',
                             'error': 'не удалось получить доходность с сайта',
                         }
-                        write_protocol_row(writer, record)
+                        writer.writerow(record)
                         protocol_file.flush()
                         print(f'{row.name}: не удалось получить доходность с сайта')
                         continue
 
                     depo_real = 1.0 + perc / 100.0
                     diff = abs(depo - depo_real)
-                    matched = diff < MATCH_TOLERANCE
+                    matched = diff < args.tolerance
                     status = 'СОВПАЛО' if matched else 'РАСХОЖДЕНИЕ'
 
                     record = {
@@ -188,8 +262,11 @@ def main():
                         'matched': 'да' if matched else 'нет',
                         'status': status,
                     }
-                    write_protocol_row(writer, record)
+                    writer.writerow(record)
                     protocol_file.flush()
+
+                    if not matched:
+                        mismatches.append(record)
 
                     print(format_result_line(
                         row.name, depo, depo_real, diff, status,
@@ -203,12 +280,16 @@ def main():
                         'matched': 'нет',
                         'error': str(exc),
                     }
-                    write_protocol_row(writer, record)
+                    writer.writerow(record)
                     protocol_file.flush()
                     print(f'{row.name}: ошибка — {exc}')
 
     finally:
         driver.quit()
+
+    if mismatches_path is not None:
+        count = write_mismatches_csv(mismatches_path, mismatches)
+        print(f'Записано расхождений: {count} → {mismatches_path}')
 
 
 if __name__ == '__main__':
