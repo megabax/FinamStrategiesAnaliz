@@ -264,9 +264,7 @@ def load_strategy_history(
 ):
     end_date_today = datetime.combine(end_date_today.date(), time.min)
 
-    if replace:
-        if from_date is None:
-            raise ValueError('Для перезагрузки необходимо указать from_date')
+    if from_date is not None:
         begin_date = datetime.combine(from_date.date(), time.min) if isinstance(from_date, datetime) else datetime.combine(from_date, time.min)
         # Верхняя граница цикла — exclusive, поэтому +1 день к включительной end-date
         end_date = end_date_today + timedelta(days=1)
@@ -275,8 +273,9 @@ def load_strategy_history(
                 f'Пропуск: начало периода {begin_date:%d.%m.%Y} не раньше конца {end_date_today:%d.%m.%Y}',
             )
             return False
+        mode_label = 'Перезагрузка' if replace else 'Загрузка'
         print(
-            f'Перезагрузка strategy_id={strategy_id} за период '
+            f'{mode_label} strategy_id={strategy_id} за период '
             f'{begin_date:%d.%m.%Y} — {end_date_today:%d.%m.%Y}',
         )
     else:
@@ -324,7 +323,7 @@ def load_strategy_history(
         print("Неправильный формат даты")
         exit(1)
 
-    if replace:
+    if from_date is not None:
         if begin_date < date_object:
             print(
                 f'Начало периода скорректировано: {begin_date:%d.%m.%Y} → {date_object:%d.%m.%Y} '

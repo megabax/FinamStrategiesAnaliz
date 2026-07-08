@@ -65,6 +65,21 @@ def history_record_existis(session,strategy_id,datetime):
     else:
         return False
 
+def delete_strategy_history_period(session, strategy_id, from_date, to_date):
+    if isinstance(from_date, datetime):
+        from_date = from_date.date()
+    if isinstance(to_date, datetime):
+        to_date = to_date.date()
+
+    deleted = session.query(History).filter(
+        History.strategy_id == strategy_id,
+        History.datetime >= from_date,
+        History.datetime <= to_date,
+    ).delete(synchronize_session=False)
+    session.commit()
+    return deleted
+
+
 def save_history_record_to_db(strategy_id, record_datetime, perc, perc_text, replace=False):
     session = create_session()
     if isinstance(record_datetime, datetime):
