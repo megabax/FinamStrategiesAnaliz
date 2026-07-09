@@ -3,14 +3,13 @@ import csv
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-
+from lib.browser import create_chrome_driver
 from lib.load import get_summ_perc, set_period
 from lib.save import create_session
 from models.strategies import History, Strategy
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 MATCH_TOLERANCE = 0.01
 PROTOCOL_DIR = Path('reports')
@@ -177,7 +176,7 @@ def main():
     )
     print(f'Протокол: {output_path}')
 
-    driver = webdriver.Chrome()
+    driver = create_chrome_driver()
     try:
         driver.get(strategy.link_text)
         wait_for_profit_calculator(driver)

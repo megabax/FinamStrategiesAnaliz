@@ -1,9 +1,7 @@
 import argparse
 from datetime import datetime
 
-from selenium import webdriver
-
-from lib.load import load_strategy_history
+from lib.browser import create_chrome_driver
 from lib.save import create_session, delete_strategy_history_period
 from models.strategies import Strategy
 
@@ -113,7 +111,7 @@ def main():
     if not period_mode:
         print(f'Конечная дата загрузки: {end_date:%d.%m.%Y}')
 
-    driver = webdriver.Chrome()
+    driver = create_chrome_driver()
     start_date = datetime.now()
     try:
         for strategy_row in strategies:

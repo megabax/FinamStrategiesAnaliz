@@ -3,15 +3,14 @@ import csv
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
-from selenium import webdriver
+from lib.browser import create_chrome_driver
+from lib.load import get_summ_perc, set_period
+from lib.save import create_session
+from models.strategies import History, Strategy
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from sqlalchemy import func
-
-from lib.load import get_summ_perc, set_period
-from lib.save import create_session
-from models.strategies import History, Strategy
 
 MATCH_TOLERANCE = 0.01
 PROTOCOL_DIR = Path('reports')
@@ -180,7 +179,7 @@ def main():
     mismatches_path = make_mismatches_path(args.mismatches) if args.mismatches else None
     mismatches = []
 
-    driver = webdriver.Chrome()
+    driver = create_chrome_driver()
     print('--- Результаты проверки ---')
     print(f'Стратегий к проверке: {total}')
     print(f'Протокол: {protocol_path}')

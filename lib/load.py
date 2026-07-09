@@ -1,4 +1,3 @@
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.keys import Keys # Важный импорт для специальных клавиш
@@ -8,6 +7,7 @@ import time as tm
 from sqlalchemy import func
 from datetime import datetime, timedelta, time
 
+from lib.browser import create_chrome_driver
 from lib.save import save_history_record_to_db
 from lib.strategy import StrategyInfo
 from lib.urlutils import extract_date_text, find_start_date_element
@@ -30,7 +30,7 @@ def get_links_selenium(url):
     """
     try:
         # Создание экземпляра веб-драйвера Chrome.  Не используем Options, чтобы видеть браузер.
-        driver = webdriver.Chrome()
+        driver = create_chrome_driver()
 
         # Переход по указанному URL
         driver.get(url)
