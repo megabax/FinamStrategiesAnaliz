@@ -2,7 +2,8 @@ import argparse
 from datetime import datetime
 
 from lib.browser import create_chrome_driver
-from lib.save import create_session, delete_strategy_history_period
+from lib.load import load_strategy_history
+from lib.save import create_session, delete_strategy_history_period, get_active_strategies
 from models.strategies import Strategy
 
 
@@ -104,9 +105,11 @@ def main():
             )
         else:
             print(f'Загрузка истории для стратегии №{strategy.number}: {strategy.name}')
+            if strategy.archived:
+                print('(архивная стратегия — обрабатывается по явному указанию номера)')
     else:
-        strategies = session.query(Strategy).all()
-        print(f'Загрузка истории для {len(strategies)} стратегий')
+        strategies = get_active_strategies(session)
+        print(f'Загрузка истории для {len(strategies)} стратегий (без архивных)')
 
     if not period_mode:
         print(f'Конечная дата загрузки: {end_date:%d.%m.%Y}')

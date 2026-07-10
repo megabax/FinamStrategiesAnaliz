@@ -22,6 +22,7 @@ class Strategy(Base):
     annual_income=sa.Column(sa.Integer)
     min_summa=sa.Column(sa.Integer)
     link_text=sa.Column(sa.String(200))
+    archived=sa.Column(sa.Boolean, nullable=False, server_default=sa.false(), default=False)
     history=relationship("History", back_populates="strategy") #Связь для удобства
 
 class History(Base):

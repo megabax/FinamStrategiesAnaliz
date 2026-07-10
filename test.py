@@ -164,7 +164,8 @@ def main():
             Strategy.name,
             Strategy.link_text,
         )
-        .outerjoin(Strategy, History.strategy_id == Strategy.id)
+        .join(Strategy, History.strategy_id == Strategy.id)
+        .filter(Strategy.archived == False)
         .group_by(
             History.strategy_id,
             Strategy.number,
@@ -181,7 +182,7 @@ def main():
 
     driver = create_chrome_driver()
     print('--- Результаты проверки ---')
-    print(f'Стратегий к проверке: {total}')
+    print(f'Стратегий к проверке: {total} (без архивных)')
     print(f'Протокол: {protocol_path}')
     if mismatches_path is not None:
         print(f'Список расхождений: {mismatches_path}')

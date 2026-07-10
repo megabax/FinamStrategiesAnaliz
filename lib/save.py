@@ -107,6 +107,10 @@ def save_history_record_to_db(strategy_id, record_datetime, perc, perc_text, rep
     session.add(new_record)
     session.commit()
 
+def get_active_strategies(session):
+    return session.query(Strategy).filter(Strategy.archived == False).order_by(Strategy.id).all()
+
+
 def create_session():
     engine = sa.create_engine(CONNECTION_STRING)
     engine.connect()
