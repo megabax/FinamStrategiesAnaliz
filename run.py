@@ -1,33 +1,62 @@
+import argparse
+
+from lib.browser import create_chrome_driver
 from lib.load import get_links_selenium
 from lib.save import save_strategies_to_db
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description='Загрузка списка стратегий с comon.ru в базу данных',
+    )
+    parser.add_argument(
+        '--only-new',
+        action='store_true',
+        help='Не обновлять существующие стратегии, добавлять только новые',
+    )
+    return parser.parse_args()
+
+
 def main():
-    """
-    Запрашивает у пользователя URL (или использует заданный), извлекает ссылки с помощью Selenium
-    и выводит их на экран.
-    """
-    url = "https://www.comon.ru/strategies/" # Можно заменить на input("Введите URL: ") для интерактивного ввода
-    #https: // www.comon.ru / strategies /?page = 2
+    args = parse_args()
+    url = 'https://www.comon.ru/strategies/'
 
-    links, pages_count = get_links_selenium(url)
+    total_added = 0
+    total_skipped = 0
 
-    print("Найдено",pages_count,"страниц")
+    driver = create_chrome_driver()
+    try:
+        links, pages_count = get_links_selenium(url, driver=driver)
+        if pages_count is None:
+            print('Не удалось определить число страниц.')
+            return
 
-    if links:
-        save_strategies_to_db(links)
-    else:
-        print("\nНе удалось найти ссылки на этой странице.")
+        print('Найдено', pages_count, 'страниц')
+        if args.only_new:
+            print('Режим: только новые стратегии (существующие пропускаются)')
 
-    for i in range(2,pages_count+1):
-        print("-------------------- Страница",i,"----------------------------------")
-        links, pages_count = get_links_selenium(f"https://www.comon.ru/strategies/?page={i}")
         if links:
-            save_strategies_to_db(links)
+            added, skipped = save_strategies_to_db(links, skip_existing=args.only_new)
+            total_added += added
+            total_skipped += skipped
         else:
-            print("\nНе удалось найти ссылки на этой странице.")
+            print('Не удалось найти ссылки на этой странице.')
+
+        for i in range(2, pages_count + 1):
+            print('-------------------- Страница', i, '----------------------------------')
+            links, _ = get_links_selenium(f'https://www.comon.ru/strategies/?page={i}', driver=driver)
+            if links:
+                added, skipped = save_strategies_to_db(links, skip_existing=args.only_new)
+                total_added += added
+                total_skipped += skipped
+            else:
+                print('Не удалось найти ссылки на этой странице.')
+    finally:
+        driver.quit()
+
+    if args.only_new:
+        print(f'Итого: добавлено {total_added}, пропущено (уже в базе) {total_skipped}')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
-

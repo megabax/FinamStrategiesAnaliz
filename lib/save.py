@@ -120,15 +120,19 @@ def create_session():
     session = Session()
     return session
 
-def save_strategies_to_db(links):
-    session=create_session()
+def save_strategies_to_db(links, skip_existing=False):
+    session = create_session()
+    added = 0
+    skipped = 0
     for link in links:
-        link_text, info, number=link
-        kind=find_or_create_kind(session,info.kind)
+        link_text, info, number = link
+        kind = find_or_create_kind(session, info.kind)
 
         existing_record = session.query(Strategy).filter_by(number=number).first()
         if existing_record:
-            # Update existing record
+            if skip_existing:
+                skipped += 1
+                continue
             existing_record.name = info.name
             existing_record.kind = kind
             existing_record.subscribers = info.subscribers
@@ -136,8 +140,12 @@ def save_strategies_to_db(links):
             existing_record.min_summa = info.min_summa
             existing_record.link_text = link_text
         else:
-            new_record = Strategy(number=number, name=info.name, kind=kind,
-                                  subscribers=info.subscribers, annual_income=info.annual_income,
-                                  min_summa=info.min_summa, link_text=link_text)
+            new_record = Strategy(
+                number=number, name=info.name, kind=kind,
+                subscribers=info.subscribers, annual_income=info.annual_income,
+                min_summa=info.min_summa, link_text=link_text,
+            )
             session.add(new_record)
+            added += 1
         session.commit()
+    return added, skipped

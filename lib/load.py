@@ -16,84 +16,88 @@ from models.strategies import History
 
 pattern = r"(?:https?:\/\/)?(?:www\.)?comon\.ru\/strategies\/\d+\/"
 
-def get_links_selenium(url):
+
+def extract_strategy_links(driver):
+    links = []
+    for a_tag in driver.find_elements(By.TAG_NAME, "a"):
+        link_text = a_tag.get_attribute("href")
+        if re.match(pattern, link_text) is None:
+            continue
+        ls = a_tag.text.split("\n")
+        match = re.search(r'/(\d+)/?$', link_text)
+        if not match:
+            print("Номер не найден: ", link_text)
+            continue
+        number = match.group(1)
+        info = StrategyInfo(ls, link_text)
+        if not info.is_succes:
+            print(link_text, "кривая", ls)
+            continue
+        links.append((link_text, info, number))
+    return links
+
+
+def get_links_selenium(url, driver=None):
     """
-    Получает HTML-контент по указанному URL с помощью Selenium и извлекает все ссылки (теги <a>).
-    Открывает окно браузера, чтобы можно было видеть процесс.
+    Получает ссылки на стратегии со страницы comon.ru с помощью Selenium.
 
     Args:
         url: URL веб-страницы.
+        driver: Опционально — уже открытый WebDriver для обхода нескольких страниц.
 
     Returns:
-        Список строк, представляющих собой URL-адреса, найденные на странице.
-        Возвращает пустой список, если произошла ошибка или ссылки не найдены.
+        Кортеж (список ссылок, число страниц) или ([], None) при ошибке.
     """
     try:
-        # Создание экземпляра веб-драйвера Chrome.  Не используем Options, чтобы видеть браузер.
-        driver = create_chrome_driver()
+        if driver is None:
+            driver = create_chrome_driver()
 
-        # Переход по указанному URL
         driver.get(url)
 
-        # Ожидание загрузки элементов на странице (например, ждем появления хотя бы одного тега <a>)
         try:
-          WebDriverWait(driver, 10).until(
-              EC.presence_of_element_located((By.TAG_NAME, "a"))
-          )
-        except:
-          print("Превышено время ожидания загрузки элементов.")
-          return [], None
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "a"))
+            )
+        except Exception:
+            print("Превышено время ожидания загрузки элементов.")
+            return [], None
 
-        pages_count=get_pages_count(driver)
+        driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
+        tm.sleep(1)
 
-        # Поиск всех тегов <a> на странице
-        a_tags = driver.find_elements(By.TAG_NAME, "a")
-        links=[]
-        for a_tag in a_tags:
-            link_text=a_tag.get_attribute("href")
-            if re.match(pattern, link_text) is not None:
-                ls=a_tag.text.split("\n")
-                match = re.search(r'/(\d+)/?$', link_text)
-                if match:
-                    number = match.group(1)  # Извлекаем захваченную группу (цифры)
-                else:
-                    print("Номер не найден: ",link_text)
-                info=StrategyInfo(ls,link_text)
-                if not(info.is_succes):
-                    print(link_text,"кривая",ls)
-                    continue
-                links.append((link_text,info,number))
-
+        pages_count = get_pages_count(driver)
+        links = extract_strategy_links(driver)
         return links, pages_count
 
     except Exception as e:
         print(f"Произошла ошибка: {e}")
         return [], None
-    finally:
-        # Закрытие веб-драйвера, чтобы освободить ресурсы
-        #Раскомментируйте driver.quit() если не хотите чтобы окно оставалось открытым
-        # try:
-        #     driver.quit()
-        # except:
-        #     pass # Ignore errors during driver.quit()
-        pass #Оставляем окно браузера открытым
 
 
 def get_pages_count(driver):
+    driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
+    tm.sleep(0.5)
+
+    max_number = 0
+
     pagination_divs = driver.find_elements(By.CSS_SELECTOR, 'div[data-marker^="pagination-item"]')
-
-    # Выводим атрибуты data-marker для проверки
-    max_number=0
     for div in pagination_divs:
-        pag_text=div.get_attribute('data-marker')
-        items=pag_text.split("/")
-        number=items[-1]
+        pag_text = div.get_attribute('data-marker')
+        items = pag_text.split("/")
+        number = items[-1]
         if number.isdigit():
-            num=int(number)
-            if num>max_number:
-                max_number=num
+            max_number = max(max_number, int(number))
 
-    return max_number
+    paginator_buttons = driver.find_elements(
+        By.CSS_SELECTOR,
+        'nav[class*="strategiesPagination"] button',
+    )
+    for button in paginator_buttons:
+        text = button.text.strip()
+        if text.isdigit():
+            max_number = max(max_number, int(text))
+
+    return max_number if max_number > 0 else 1
 
 def set_date(div,driver,xpath,dt):
     items = div.find_elements(By.XPATH, xpath)
