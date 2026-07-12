@@ -1,5 +1,8 @@
 import re
 
+BADGES = frozenset({'ИИС', 'NEW', 'Копилка', 'Бонус'})
+
+
 class StrategyInfo:
     # ['Консервативный', '128', 'ИИС', 'Синергия New', 'Среднегодовая доходность', '110 %', 'Минимальная сумма',
     #  'от 370 000 ₽']
@@ -70,31 +73,37 @@ class StrategyInfo:
         return True
 
     def fill_from(self,ls):
-        self.shifh=0 #тут ['Консервативный', '1270', 'Бонус', 'Ахиллес на фьючах', 'Среднегодовая доходность', '68 %', 'Минимальная сумма', 'от 75 000 ₽']
-        if type(ls[0+self.shifh]) == str:
-            self.kind=ls[0+self.shifh] #вид ('Агрессивный','Консервативный','Умеренный')
+        self.shifh = 0
+        if type(ls[0 + self.shifh]) == str:
+            self.kind = ls[0 + self.shifh]
         else:
-            print(ls,"не строка")
+            print(ls, "не строка")
             return
         if ls[1].isdigit():
-            self.subscribers=int(ls[1])
+            self.subscribers = int(ls[1])
         else:
-            print(ls[1+self.shifh], "не число")
+            print(ls[1 + self.shifh], "не число")
             return
-        sign=ls[2+self.shifh]
-        if sign =='ИИС' or sign=="NEW" or sign=="Копилка" or sign=="Бонус":
-            self.shifh=self.shifh+1
-        self.name=ls[2+self.shifh]
-        if ls[3+self.shifh].lower()=='среднегодовая доходность':
+
+        while 2 + self.shifh < len(ls) and ls[2 + self.shifh] in BADGES:
+            self.shifh += 1
+
+        self.name = ls[2 + self.shifh]
+        income_label_idx = 3 + self.shifh
+        if ls[income_label_idx].lower() == 'среднегодовая доходность':
             if not self.fill_annual_income(ls):
                 return
         else:
-            print(ls,f"кривой, значение с индексом {3+self.shifh} должно быть 'среднегодовая доходность'")
+            print(
+                ls,
+                f"кривой, значение с индексом {income_label_idx} "
+                f"должно быть 'среднегодовая доходность'",
+            )
             return
-        if ls[5+self.shifh].lower() == 'минимальная сумма':
-            ms=self.get_min_summa(ls[6+self.shifh])
+        if ls[5 + self.shifh].lower() == 'минимальная сумма':
+            ms = self.get_min_summa(ls[6 + self.shifh])
             if ms is None:
-                print(ls[6+self.shifh],'не содержит минимальную сумму')
+                print(ls[6 + self.shifh], 'не содержит минимальную сумму')
                 return
             self.min_summa = ms
-        self.is_succes=True
+        self.is_succes = True
