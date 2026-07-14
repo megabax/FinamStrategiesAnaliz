@@ -276,7 +276,7 @@ def load_strategy_history(
             print(
                 f'Пропуск: начало периода {begin_date:%d.%m.%Y} не раньше конца {end_date_today:%d.%m.%Y}',
             )
-            return False
+            return None
         mode_label = 'Перезагрузка' if replace else 'Загрузка'
         print(
             f'{mode_label} strategy_id={strategy_id} за период '
@@ -298,7 +298,7 @@ def load_strategy_history(
                     f'История актуальна: последняя запись в БД {last_in_db:%d.%m.%Y}, '
                     f'конечная дата загрузки {end_date_today:%d.%m.%Y}',
                 )
-            return False
+            return None
 
         print(f"Загрузка с {next_date:%d.%m.%Y} для strategy_id={strategy_id}")
         begin_date = None
@@ -315,11 +315,11 @@ def load_strategy_history(
     date_info = find_start_date_element(driver)
     if date_info is None:
         print('Пропуск: не удалось найти дату старта стратегии на странице', url)
-        return False
+        return None
     date_str = extract_date_text(date_info)
     if date_str is None:
         print('Пропуск: не удалось прочитать дату старта стратегии на странице', url)
-        return False
+        return None
     date_format = "%d.%m.%Y"
     try:
         date_object = datetime.strptime(date_str, date_format)
@@ -336,7 +336,7 @@ def load_strategy_history(
             begin_date = date_object
         if begin_date >= end_date:
             print('Пропуск: после корректировки период пуст')
-            return False
+            return None
     else:
         begin_date = date_object
         if next_date > begin_date:
@@ -354,4 +354,7 @@ def load_strategy_history(
         last_summ = perc
         beg_set_date = end_set_date
 
-    return True
+    loaded_period_end = beg_set_date - timedelta(days=1)
+    if loaded_period_end < begin_date:
+        return None
+    return begin_date, loaded_period_end
