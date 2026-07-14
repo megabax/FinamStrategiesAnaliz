@@ -1,5 +1,5 @@
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from lib.browser import create_chrome_driver
 from lib.load import load_strategy_history
@@ -32,7 +32,7 @@ def parse_args():
         type=parse_date_arg,
         default=None,
         metavar='ДАТА',
-        help='Конечная дата загрузки (ГГГГ-ММ-ДД или ДД.ММ.ГГГГ). По умолчанию — сегодня',
+        help='Конечная дата загрузки (ГГГГ-ММ-ДД или ДД.ММ.ГГГГ). По умолчанию — вчера',
     )
     parser.add_argument(
         '--from-date',
@@ -83,7 +83,7 @@ def main():
     args = parse_args()
     validate_args(args)
 
-    end_date = args.end_date or datetime.now()
+    end_date = args.end_date or (datetime.now() - timedelta(days=1))
     session = create_session()
     period_mode = args.reload or args.clear_and_load
 
