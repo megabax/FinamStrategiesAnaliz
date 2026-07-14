@@ -4,6 +4,7 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from lib.browser import create_chrome_driver
+from lib.csv_export import CSV_DELIMITER, CSV_ENCODING, format_csv_record
 from lib.load import get_summ_perc, set_period
 from lib.save import create_session
 from models.strategies import History, Strategy
@@ -181,8 +182,8 @@ def main():
         driver.get(strategy.link_text)
         wait_for_profit_calculator(driver)
 
-        with output_path.open('w', encoding='utf-8-sig', newline='') as protocol_file:
-            writer = csv.DictWriter(protocol_file, fieldnames=CSV_COLUMNS, delimiter=';')
+        with output_path.open('w', encoding=CSV_ENCODING, newline='') as protocol_file:
+            writer = csv.DictWriter(protocol_file, fieldnames=CSV_COLUMNS, delimiter=CSV_DELIMITER)
             writer.writeheader()
             protocol_file.flush()
 
@@ -232,14 +233,14 @@ def main():
                     matched = diff < args.tolerance
                     status = 'СОВПАЛО' if matched else 'РАСХОЖДЕНИЕ'
 
-                    record = {
+                    record = format_csv_record({
                         **base_record,
-                        'depo': f'{depo:.6f}',
-                        'depo_real': f'{depo_real:.6f}',
-                        'diff': f'{diff:.6f}',
+                        'depo': depo,
+                        'depo_real': depo_real,
+                        'diff': diff,
                         'matched': 'да' if matched else 'нет',
                         'status': status,
-                    }
+                    }, float_fields=('depo', 'depo_real', 'diff'))
                     writer.writerow(record)
                     protocol_file.flush()
 

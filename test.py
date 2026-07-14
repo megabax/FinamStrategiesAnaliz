@@ -4,6 +4,7 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from lib.browser import create_chrome_driver
+from lib.csv_export import CSV_DELIMITER, CSV_ENCODING, format_csv_record
 from lib.load import get_summ_perc, set_period
 from lib.save import create_session
 from models.strategies import History, Strategy
@@ -123,11 +124,11 @@ def write_mismatches_csv(path, mismatches):
         key=lambda item: float(item['diff']),
         reverse=True,
     )
-    with path.open('w', encoding='utf-8-sig', newline='') as mismatches_file:
-        writer = csv.DictWriter(mismatches_file, fieldnames=MISMATCHES_COLUMNS, delimiter=';')
+    with path.open('w', encoding=CSV_ENCODING, newline='') as mismatches_file:
+        writer = csv.DictWriter(mismatches_file, fieldnames=MISMATCHES_COLUMNS, delimiter=CSV_DELIMITER)
         writer.writeheader()
         for rank, item in enumerate(mismatches_sorted, start=1):
-            writer.writerow({
+            writer.writerow(format_csv_record({
                 'rank': rank,
                 'strategy_id': item['strategy_id'],
                 'number': item['number'],
@@ -139,7 +140,7 @@ def write_mismatches_csv(path, mismatches):
                 'period_end': item['period_end'],
                 'days_count': item['days_count'],
                 'link': item['link'],
-            })
+            }, float_fields=('depo', 'depo_real', 'diff')))
     return len(mismatches_sorted)
 
 
@@ -188,8 +189,8 @@ def main():
         print(f'Список расхождений: {mismatches_path}')
 
     try:
-        with protocol_path.open('w', encoding='utf-8-sig', newline='') as protocol_file:
-            writer = csv.DictWriter(protocol_file, fieldnames=CSV_COLUMNS, delimiter=';')
+        with protocol_path.open('w', encoding=CSV_ENCODING, newline='') as protocol_file:
+            writer = csv.DictWriter(protocol_file, fieldnames=CSV_COLUMNS, delimiter=CSV_DELIMITER)
             writer.writeheader()
             protocol_file.flush()
 
@@ -254,14 +255,14 @@ def main():
                     matched = diff < args.tolerance
                     status = 'СОВПАЛО' if matched else 'РАСХОЖДЕНИЕ'
 
-                    record = {
+                    record = format_csv_record({
                         **base_record,
-                        'depo': f'{depo:.6f}',
-                        'depo_real': f'{depo_real:.6f}',
-                        'diff': f'{diff:.6f}',
+                        'depo': depo,
+                        'depo_real': depo_real,
+                        'diff': diff,
                         'matched': 'да' if matched else 'нет',
                         'status': status,
-                    }
+                    }, float_fields=('depo', 'depo_real', 'diff'))
                     writer.writerow(record)
                     protocol_file.flush()
 
