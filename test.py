@@ -4,7 +4,7 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from lib.browser import create_chrome_driver
-from lib.csv_export import CSV_DELIMITER, CSV_ENCODING, format_csv_record
+from lib.csv_export import CSV_DELIMITER, CSV_ENCODING, format_csv_record, parse_decimal
 from lib.load import get_summ_perc, set_period
 from lib.save import create_session
 from models.strategies import History, Strategy
@@ -121,7 +121,7 @@ def make_mismatches_path(arg_value):
 def write_mismatches_csv(path, mismatches):
     mismatches_sorted = sorted(
         mismatches,
-        key=lambda item: float(item['diff']),
+        key=lambda item: parse_decimal(item['diff']),
         reverse=True,
     )
     with path.open('w', encoding=CSV_ENCODING, newline='') as mismatches_file:

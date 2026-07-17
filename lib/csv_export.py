@@ -12,6 +12,17 @@ CSV_DELIMITER = ';'
 CSV_ENCODING = 'utf-8-sig'
 
 
+def parse_decimal(value: Any) -> float:
+    """Преобразует число или строку с «.»/«,» в float."""
+    if value is None or value == '':
+        raise ValueError('пустое значение')
+    if isinstance(value, bool):
+        raise ValueError(f'нечисловое значение: {value!r}')
+    if isinstance(value, (int, float)):
+        return float(value)
+    return float(str(value).strip().replace(',', '.'))
+
+
 def format_decimal(value: Any, precision: int | None = 6) -> Any:
     """Форматирует число для CSV: десятичный разделитель — запятая."""
     if value is None or value == '':
@@ -30,7 +41,7 @@ def format_decimal(value: Any, precision: int | None = 6) -> Any:
         if stripped == '':
             return value
         try:
-            number = float(stripped.replace(',', '.'))
+            number = parse_decimal(stripped)
         except ValueError:
             return value
         return format_decimal(number, precision)
