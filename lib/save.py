@@ -111,6 +111,15 @@ def get_active_strategies(session):
     return session.query(Strategy).filter(Strategy.archived == False).order_by(Strategy.id).all()
 
 
+def set_strategy_archived(session, strategy_id, archived=True):
+    strategy = session.query(Strategy).filter(Strategy.id == strategy_id).first()
+    if strategy is None:
+        raise ValueError(f'Стратегия strategy_id={strategy_id} не найдена')
+    strategy.archived = archived
+    session.commit()
+    return strategy
+
+
 def create_session():
     engine = sa.create_engine(CONNECTION_STRING)
     engine.connect()
