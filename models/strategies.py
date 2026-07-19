@@ -31,6 +31,6 @@ class History(Base):
     datetime=sa.Column(sa.Date())
     strategy_id=sa.Column(sa.Integer, sa.ForeignKey('strategies.id'))  # Объявление форейндж кей
     strategy=relationship("Strategy", back_populates="history") #Связь для удобства
-    perc_income_day=sa.Column(sa.Numeric(precision=7, scale=3))
+    perc_income_day=sa.Column(sa.Numeric(precision=16, scale=6))
     perc_text=sa.Column(sa.String(40))
 
