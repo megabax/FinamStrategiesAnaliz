@@ -8,6 +8,7 @@ from sqlalchemy import func
 from datetime import datetime, timedelta, time
 
 from lib.browser import create_chrome_driver
+from lib.comon_api import fetch_strategy_profit, profit_api_to_db_series
 from lib.save import save_history_record_to_db
 from lib.strategy import StrategyInfo
 from lib.urlutils import extract_date_text, find_start_date_element
@@ -256,6 +257,156 @@ def get_summ_perc(driver,last_perc):
         i+=1
         #raise Exception("Что-то не смогли взять сумму")
     return perc,text.replace("₽", 'руб.')
+
+
+def load_strategy_history_from_api(
+    strategy_number,
+    session,
+    strategy_id,
+    end_date_today,
+    from_date=None,
+    replace=False,
+):
+    """
+    Загрузка истории через GET /api/v1/strategies/{number}/profit.
+    Границы периода совпадают с Selenium-режимом load_strategy_history.
+    При ошибке API/данных — исключение (для fallback).
+    Если грузить нечего — None.
+    """
+    end_date_today = datetime.combine(end_date_today.date(), time.min)
+
+    points = fetch_strategy_profit(strategy_number)
+    series = profit_api_to_db_series(points)
+    if not series:
+        raise ValueError(f'API вернул пустую историю для №{strategy_number}')
+
+    strategy_start = datetime.combine(min(series.keys()), time.min)
+
+    if from_date is not None:
+        begin_date = datetime.combine(
+            from_date.date() if isinstance(from_date, datetime) else from_date,
+            time.min,
+        )
+        end_exclusive = end_date_today + timedelta(days=1)
+        if begin_date >= end_exclusive:
+            print(
+                f'Пропуск: начало периода {begin_date:%d.%m.%Y} не раньше конца '
+                f'{end_date_today:%d.%m.%Y}',
+            )
+            return None
+        mode_label = 'Перезагрузка' if replace else 'Загрузка'
+        print(
+            f'{mode_label} (API) strategy_id={strategy_id} за период '
+            f'{begin_date:%d.%m.%Y} — {end_date_today:%d.%m.%Y}',
+        )
+        if begin_date < strategy_start:
+            print(
+                f'Начало периода скорректировано: {begin_date:%d.%m.%Y} -> '
+                f'{strategy_start:%d.%m.%Y} (дата старта по API)',
+            )
+            begin_date = strategy_start
+        if begin_date >= end_exclusive:
+            print('Пропуск: после корректировки период пуст')
+            return None
+        last_inclusive = end_date_today.date()
+    else:
+        last_in_db = session.query(func.max(History.datetime)).filter(
+            History.strategy_id == strategy_id,
+        ).scalar()
+        if last_in_db is None:
+            next_date = datetime(1970, 1, 1)
+        else:
+            next_date = datetime.combine(last_in_db + timedelta(days=1), time.min)
+        if next_date + timedelta(days=1) >= end_date_today:
+            if last_in_db is None:
+                print('Пропуск: нечего загружать до', end_date_today.strftime('%d.%m.%Y'))
+            else:
+                print(
+                    f'История актуальна: последняя запись в БД {last_in_db:%d.%m.%Y}, '
+                    f'конечная дата загрузки {end_date_today:%d.%m.%Y}',
+                )
+            return None
+
+        print(f'Загрузка (API) с {next_date:%d.%m.%Y} для strategy_id={strategy_id}')
+        # Как в Selenium-ветке: end_exclusive = end_date_today (последний день = вчера-1)
+        end_exclusive = end_date_today
+        begin_date = strategy_start
+        if next_date > begin_date:
+            begin_date = next_date
+        if begin_date >= end_exclusive:
+            print('Пропуск: после корректировки период пуст')
+            return None
+        last_inclusive = (end_exclusive - timedelta(days=1)).date()
+
+    days_to_load = [
+        day for day in sorted(series)
+        if begin_date.date() <= day <= last_inclusive
+    ]
+    if not days_to_load:
+        print('Пропуск: в API нет точек за выбранный период')
+        return None
+
+    for day in days_to_load:
+        perc = round(series[day], 6)
+        perc_text = f'{perc:.6f} %'
+        save_history_record_to_db(
+            strategy_id,
+            day,
+            perc,
+            perc_text,
+            replace=replace,
+        )
+
+    loaded_begin = datetime.combine(days_to_load[0], time.min)
+    loaded_end = datetime.combine(days_to_load[-1], time.min)
+    print(
+        f'API: записано дней={len(days_to_load)} '
+        f'({loaded_begin:%d.%m.%Y} — {loaded_end:%d.%m.%Y})',
+    )
+    return loaded_begin, loaded_end
+
+
+def load_strategy_history_auto(
+    driver,
+    url,
+    session,
+    strategy_id,
+    end_date_today,
+    strategy_number,
+    from_date=None,
+    replace=False,
+    use_api=False,
+):
+    """
+    При use_api=True пробует API; при ошибке — Selenium (load_strategy_history).
+    Проверка после загрузки остаётся снаружи (verify_strategy_history).
+    """
+    if use_api:
+        try:
+            return load_strategy_history_from_api(
+                strategy_number,
+                session,
+                strategy_id,
+                end_date_today,
+                from_date=from_date,
+                replace=replace,
+            )
+        except Exception as exc:
+            print(
+                f'API загрузка для №{strategy_number} не удалась ({exc}). '
+                f'Fallback на Selenium.',
+            )
+
+    return load_strategy_history(
+        driver,
+        url,
+        session,
+        strategy_id,
+        end_date_today,
+        from_date=from_date,
+        replace=replace,
+    )
+
 
 def load_strategy_history(
     driver,

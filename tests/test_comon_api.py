@@ -22,3 +22,23 @@ def test_profit_api_to_db_series():
     series = profit_api_to_db_series(points)
     assert series[date(2026, 7, 11)] == 1.0
     assert series[date(2026, 7, 10)] == -2.0
+
+
+def test_probe_profit_api_rejects_bad_payload(monkeypatch):
+    from lib import comon_api
+
+    def fake_fetch(number, timeout=20.0):
+        return [{'foo': 1}]
+
+    monkeypatch.setattr(comon_api, 'fetch_strategy_profit', fake_fetch)
+    assert comon_api.probe_profit_api(109075) is False
+
+
+def test_probe_profit_api_ok(monkeypatch):
+    from lib import comon_api
+
+    def fake_fetch(number, timeout=20.0):
+        return [{'date': '2026-07-12', 'value': 1.0, 'rValue': 0.01}]
+
+    monkeypatch.setattr(comon_api, 'fetch_strategy_profit', fake_fetch)
+    assert comon_api.probe_profit_api(109075) is True

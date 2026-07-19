@@ -49,6 +49,36 @@ def fetch_strategy_profit(number: int, timeout: float = 60.0) -> list[dict]:
     return data
 
 
+def probe_profit_api(sample_number: int, timeout: float = 20.0) -> bool:
+    """
+    Проверяет, что недокументированный profit API отвечает и отдаёт ожидаемую структуру.
+    """
+    try:
+        points = fetch_strategy_profit(sample_number, timeout=timeout)
+    except Exception as exc:
+        print(f'Проверка API profit: недоступен ({exc})')
+        return False
+
+    if not points:
+        print('Проверка API profit: пустой data')
+        return False
+
+    sample = points[0]
+    if not isinstance(sample, dict) or 'date' not in sample or 'rValue' not in sample:
+        print(f'Проверка API profit: неожиданная структура точки {sample!r}')
+        return False
+
+    try:
+        date.fromisoformat(str(sample['date']))
+        float(sample['rValue'])
+    except (TypeError, ValueError) as exc:
+        print(f'Проверка API profit: не удалось разобрать точку ({exc})')
+        return False
+
+    print(f'Проверка API profit: OK (number={sample_number}, точек={len(points)})')
+    return True
+
+
 def api_point_to_db_day(api_date: date | datetime | str) -> date:
     """Дата в БД, соответствующая точке API с указанной date."""
     if isinstance(api_date, str):

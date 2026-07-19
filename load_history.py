@@ -3,7 +3,8 @@ import sys
 from datetime import datetime, timedelta
 
 from lib.browser import create_chrome_driver
-from lib.load import load_strategy_history
+from lib.comon_api import probe_profit_api
+from lib.load import load_strategy_history_auto
 from lib.save import create_session, delete_strategy_history_period, get_active_strategies
 from lib.verify import MATCH_TOLERANCE, HistoryVerificationError, verify_strategy_history
 from models.strategies import Strategy
@@ -58,6 +59,11 @@ def parse_args():
         type=float,
         default=MATCH_TOLERANCE,
         help=f'Допустимая абсолютная разница множителей при проверке (по умолчанию {MATCH_TOLERANCE})',
+    )
+    parser.add_argument(
+        '--force-selenium',
+        action='store_true',
+        help='Не использовать API profit, грузить только через Selenium',
     )
     return parser.parse_args()
 
@@ -118,8 +124,23 @@ def main():
         strategies = get_active_strategies(session)
         print(f'Загрузка истории для {len(strategies)} стратегий (без архивных)')
 
+    if not strategies:
+        print('Нет стратегий для загрузки.')
+        return
+
     if not period_mode:
         print(f'Конечная дата загрузки: {end_date:%d.%m.%Y}')
+
+    use_api = False
+    if args.force_selenium:
+        print('Режим загрузки: Selenium (--force-selenium)')
+    else:
+        sample_number = strategies[0].number
+        use_api = probe_profit_api(sample_number)
+        if use_api:
+            print('Режим загрузки: API profit (при ошибке — fallback на Selenium)')
+        else:
+            print('Режим загрузки: Selenium (API недоступен)')
 
     driver = create_chrome_driver()
     start_date = datetime.now()
@@ -137,14 +158,16 @@ def main():
                     f'(strategy_id={strategy_row.id}, номер {strategy_row.number})',
                 )
 
-            loaded_period = load_strategy_history(
+            loaded_period = load_strategy_history_auto(
                 driver,
                 strategy_row.link_text,
                 session,
                 strategy_row.id,
                 end_date,
+                strategy_row.number,
                 from_date=args.from_date if period_mode else None,
                 replace=args.reload,
+                use_api=use_api,
             )
             if loaded_period is None:
                 print('Пропустили стратегию', strategy_row.id, f'(номер {strategy_row.number})')
