@@ -53,3 +53,29 @@ def test_load_mismatch_sample_finds_depo_one_candidates(mod):
     candidates = [row for row in rows if mod.is_depo_real_one(row['depo_real'])]
     assert len(rows) >= len(candidates) > 0
     assert all(parse_decimal(row['depo_real']) == pytest.approx(1.0) for row in candidates)
+
+
+def test_zero_income_2026_period_intersection(mod):
+    period = mod.zero_income_2026_period(
+        datetime(2020, 1, 1),
+        datetime(2026, 7, 12),
+        today=datetime(2026, 7, 20),
+    )
+    assert period == (datetime(2026, 1, 1), datetime(2026, 7, 12))
+
+
+def test_zero_income_2026_period_none_if_before_2026(mod):
+    assert mod.zero_income_2026_period(
+        datetime(2020, 1, 1),
+        datetime(2025, 12, 31),
+        today=datetime(2026, 7, 20),
+    ) is None
+
+
+def test_zero_income_2026_period_clamps_to_today(mod):
+    period = mod.zero_income_2026_period(
+        datetime(2024, 1, 1),
+        datetime(2027, 1, 1),
+        today=datetime(2026, 3, 15),
+    )
+    assert period == (datetime(2026, 1, 1), datetime(2026, 3, 15))
