@@ -15,7 +15,7 @@ pip install -r requirements.txt   # если есть; иначе — завис
 alembic upgrade head
 ```
 
-Скопируйте `.env.example` в `.env` и при необходимости настройте Chrome.
+Скопируйте `.env.example` в `.env` и задайте `DATABASE_URL` (или `MSSQL_*`) для MSSQL, при необходимости настройте Chrome.
 
 ## Конвейер данных
 

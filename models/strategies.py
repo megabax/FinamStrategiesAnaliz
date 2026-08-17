@@ -33,4 +33,4 @@ class History(Base):
     strategy=relationship("Strategy", back_populates="history") #Связь для удобства
     perc_income_day=sa.Column(sa.Numeric(precision=16, scale=6))
     perc_text=sa.Column(sa.String(40))
-
+ 

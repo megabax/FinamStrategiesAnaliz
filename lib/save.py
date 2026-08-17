@@ -2,19 +2,8 @@ import sqlalchemy as sa
 from datetime import datetime
 from sqlalchemy.orm import sessionmaker
 
+from lib.env import get_database_name, get_database_url
 from models.strategies import Base, Strategy, Kind, History
-
-# Параметры подключения к MSSQL
-SERVER = 'MEGABAX\SQLEXPRESS' #  'localhost' or 'your_server_name' or 'your_server_address'
-DATABASE_NAME = 'FinamStrategies'
-USERNAME = 'your_username'
-PASSWORD = 'your_password'
-DRIVER = 'ODBC Driver 17 for SQL Server' # Or appropriate driver installed
-
-# Строка подключения
-#CONNECTION_STRING = f"mssql+pyodbc://{USERNAME}:{PASSWORD}@{SERVER}/{DATABASE_NAME}?driver={DRIVER}"
-# Alternative connection string for Windows Authentication (remove USERNAME and PASSWORD)
-CONNECTION_STRING = f"mssql+pyodbc://{SERVER}/{DATABASE_NAME}?driver={DRIVER}&Trusted_Connection=yes"  # If using Windows Authentication
 
 def check_and_create_database(engine, database_name):
     """Проверяет наличие базы данных и создает её, если она не существует."""
@@ -121,9 +110,10 @@ def set_strategy_archived(session, strategy_id, archived=True):
 
 
 def create_session():
-    engine = sa.create_engine(CONNECTION_STRING)
+    connection_string = get_database_url()
+    engine = sa.create_engine(connection_string)
     engine.connect()
-    check_and_create_database(engine, DATABASE_NAME)
+    check_and_create_database(engine, get_database_name(connection_string))
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
