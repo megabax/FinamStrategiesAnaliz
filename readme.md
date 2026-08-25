@@ -187,7 +187,6 @@ analiz/
 | `analiz/metrics.py` + `analiz/rank.py` | Метрики и рейтинг по истории из БД (~1–2 с на 100+ стратегий) |
 | `test.py`, `test_intervals.py`, `lib/verify.py` | Верификация данных (БД vs сайт) |
 | `analiz/stathist.py` | График дневной доходности, MA, полосы ± std |
-| `str_test.py` | Сравнение портфеля со случайной моделью (черновик) |
 | `query.sql` | SQL: avg/stdev дневной доходности по стратегиям |
 
 ### Пока не реализовано
