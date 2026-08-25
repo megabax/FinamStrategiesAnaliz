@@ -215,3 +215,43 @@ docs/               — скриншоты рейтинга и графиков 
 1. **Визуализация** — equity curve, drawdown, сравнение стратегий (`stathist.py`).
 2. **Скоринг** — настраиваемая формула по Sharpe, Calmar, drawdown, subscribers.
 
+## Автор
+
+**Имя** · Шуравин Александр  
+**Роль** · Python developer  
+**О проекте** · личный data pipeline по публичным стратегиям comon.ru (Finam): Selenium / API → MSSQL → метрики риска и рейтинг
+
+### Контакты
+
+| | |
+|---|---|
+| Telegram | [@ShuravinAlex](https://t.me/ShuravinAlex) |
+| GitHub | [github.com/megabax](https://github.com/megabax) |
+| TenChat | [tenchat.ru/5244130](https://tenchat.ru/5244130) |
+| Habr | [habr.com/ru/users/megabax](https://habr.com/ru/users/megabax/) |
+
+### Для работодателя / рекрутера
+
+Кратко о стеке **этого** репозитория: Python, Selenium, requests (неофициальный profit API), SQLAlchemy + Alembic, MS SQL (pyodbc), pandas, matplotlib, pytest; CLI-конвейер (`run.py`, `load_history.py`, `analiz/rank.py`); слои `lib/` (загрузка / БД / verify) · `models/` · `analiz/` · `tests/`.
+
+| | |
+|---|---|
+| Резюме (PDF) | [Google Drive](https://drive.google.com/file/d/1DLPi60uDSgN74iixhaLfZdzF9_WFVpF5/view?usp=drive_link) |
+| Резюме (HH) | [hh.ru](https://izhevsk.hh.ru/resume/8ad4938fff10ad778c0039ed1f446b617a7149) |
+| Готовность к работе | удалённо (предпочтительно); гибрид / офис — Ижевск |
+| Целевая роль | ML / AI Engineer (LLM, CV, R&D); дата-сайентист / разработчик |
+
+**Стек (из опыта, кратко):**
+
+| Область | Технологии |
+|---------|------------|
+| LLM / AI | OpenAI-compatible API, DeepSeek, LangChain, RAG, embeddings (sentence-transformers, BGE), Ollama (Llama/Mistral), промпт-инжиниринг, privacy / 152-ФЗ (Natasha NER) |
+| Computer Vision | PyTorch, OpenCV, YOLO, ONNX, OCR (Tesseract), Librosa |
+| Backend / API | Python, FastAPI, asyncio, C#, REST, RabbitMQ |
+| Данные | PostgreSQL, MS SQL, SQLite, Qdrant, MinIO / S3, pandas, NumPy |
+| ETL / MLOps | Airflow, Docker, Linux, Prometheus, Grafana, n8n |
+| Качество кода | Git, Pytest, UML / ООП |
+
+Одной строкой: `Python · PyTorch · YOLO · OpenCV · FastAPI · Docker · PostgreSQL · Qdrant · LangChain / RAG · Airflow · C# · MS SQL · Linux`
+
+> Вопросы по коду и резюме — удобнее в Telegram / Max.
