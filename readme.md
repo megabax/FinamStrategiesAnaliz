@@ -90,6 +90,20 @@ python analiz/rank.py --from-date 2024-01-01 --to-date 2024-12-31 --top 20
 python analiz/rank.py --sort-by calmar --kind умеренный --output reports/rank_2024.csv
 ```
 
+### Примеры вывода
+
+Рейтинг (`analiz/rank.py` → CSV в Excel):
+
+![Топ рейтинга стратегий](docs/rangs.png)
+
+Графики дневной доходности (`analiz/stathist.py -n …`):
+
+![№117907 Ступеньки](docs/117907.png)
+
+![№112741 Юань в тренде](docs/112741.png)
+
+![№124001 AI Index](docs/124001.png)
+
 ## Формат CSV-отчётов
 
 Все отчёты в `reports/` используют единый формат (модуль `lib/csv_export.py`):
@@ -177,7 +191,8 @@ models/
 analiz/
   metrics.py      — расчёт метрик по истории
   rank.py           — CLI рейтинга → CSV
-  stathist.py       — черновик: график дневной доходности
+  stathist.py       — график дневной доходности (MA ± STD)
+docs/               — скриншоты рейтинга и графиков для README
 ```
 
 ## Что есть для анализа

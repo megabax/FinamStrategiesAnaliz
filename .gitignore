@@ -90,4 +90,5 @@ info.txt
 памятка.txt
 *.xlsx
 *.png
+!docs/*.png
 other/*
