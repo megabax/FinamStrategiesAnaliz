@@ -90,6 +90,15 @@ python analiz/rank.py --from-date 2024-01-01 --to-date 2024-12-31 --top 20
 python analiz/rank.py --sort-by calmar --kind умеренный --output reports/rank_2024.csv
 ```
 
+### Симулятор входов/выходов
+
+```bash
+python -m sim.backtest -n 112741
+python -m sim.backtest -n 117907 -w 100 --ma-min 0.0 --ratio-min 0.05
+```
+
+Алгоритм `MaStdThresholdAlgorithm`: вход, если скользящее среднее дневного % и отношение MA/STD не ниже порогов; выход, если любой из показателей ниже порога. В конце — график equity против buy&hold.
+
 ### Примеры вывода
 
 Рейтинг (`analiz/rank.py` → CSV в Excel):
@@ -192,7 +201,7 @@ analiz/
   metrics.py      — расчёт метрик по истории
   rank.py           — CLI рейтинга → CSV
   stathist.py       — график дневной доходности (MA ± STD)
-sim/                — шаблон бэктеста long-only (вход/выход из стратегии)
+sim/                — симулятор long-only (вход/выход), бэктест MA/STD vs buy&hold
 docs/               — скриншоты рейтинга и графиков для README
 ```
 
@@ -203,19 +212,19 @@ docs/               — скриншоты рейтинга и графиков 
 | `analiz/metrics.py` + `analiz/rank.py` | Метрики и рейтинг по истории из БД (~1–2 с на 100+ стратегий) |
 | `test.py`, `test_intervals.py`, `lib/verify.py` | Верификация данных (БД vs сайт) |
 | `analiz/stathist.py` | График дневной доходности, MA, полосы ± std |
-| `sim/` | Шаблон симулятора входов/выходов (long-only); PnL — следующий шаг |
+| `sim/` | Симулятор long-only: `MaStdThresholdAlgorithm`, CLI `python -m sim.backtest -n …` |
 | `query.sql` | SQL: avg/stdev дневной доходности по стратегиям |
 
 ### Пока не реализовано
 
 - взвешенный **score** (комбинация метрик);
 - визуализация equity / drawdown для нескольких стратегий;
-- полное начисление PnL / комиссии в `sim/` (каркас OOP уже есть);
+- комиссии / мультистратегийный портфель в `sim/`;
 - прогноз (`lib/nnlib.py` — заготовка LSTM).
 
 ## Дальнейшее развитие
 
-1. **Симулятор** — дневной PnL в позиции, загрузка bars из БД, первый алгоритм сверх buy&hold.
+1. **Симулятор** — комиссии, несколько стратегий с весами, другие алгоритмы.
 2. **Визуализация** — equity curve, drawdown, сравнение стратегий (`stathist.py`).
 3. **Скоринг** — настраиваемая формула по Sharpe, Calmar, drawdown, subscribers.
 

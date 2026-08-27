@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from sim.algorithm import StrategyAlgorithm
 from sim.context import MarketContext
 from sim.types import Bar, Position, PositionState, Signal, Trade
@@ -11,7 +13,8 @@ class StrategySimulator:
     """Связка одной стратегии comon с одним StrategyAlgorithm.
 
     Шортов нет: ENTER только из FLAT, EXIT только из LONG, иначе сигнал игнорируется.
-    Начисление PnL по perc_income_day — следующий шаг (см. _apply_daily_return).
+    Дневной ``perc_income_day`` начисляется на equity только в позиции LONG
+    (после исполнения сигнала за день).
     """
 
     def __init__(
@@ -31,13 +34,10 @@ class StrategySimulator:
         self.position = Position()
         self._history: list[Bar] = []
         self.trades: list[Trade] = []
+        self.equity_curve: list[tuple[date, float]] = []
 
     def step(self, bar: Bar) -> Trade | None:
-        """Один торговый день: сигнал алгоритма → сделка (если есть) → учёт бара.
-
-        Raises:
-            ValueError: если bar.strategy_id не совпадает с симулятором.
-        """
+        """Один торговый день: сигнал → сделка → PnL если LONG → учёт бара."""
         if bar.strategy_id != self.strategy_id:
             raise ValueError(
                 f'bar.strategy_id={bar.strategy_id} != simulator.strategy_id={self.strategy_id}',
@@ -57,16 +57,13 @@ class StrategySimulator:
         elif effective is Signal.EXIT:
             trade = self._exit(bar)
 
+        self._apply_daily_return(bar)
         self._history.append(bar)
-        # TODO: следующий шаг — self._apply_daily_return(bar) (PnL только в LONG).
-        # Метод объявлен ниже и пока бросает NotImplementedError.
+        self.equity_curve.append((bar.dt, self.equity))
         return trade
 
     def run(self, bars: list[Bar] | tuple[Bar, ...]) -> list[Trade]:
-        """Прогнать последовательность баров; вернуть список сделок.
-
-        Пока без начисления дневной доходности (см. _apply_daily_return).
-        """
+        """Прогнать последовательность баров; вернуть список сделок."""
         trades: list[Trade] = []
         for bar in bars:
             trade = self.step(bar)
@@ -75,20 +72,16 @@ class StrategySimulator:
         return trades
 
     def _resolve_long_only(self, signal: Signal) -> Signal | None:
-        """Отфильтровать невозможные для long-only действия.
-
-        Returns:
-            ENTER / EXIT для исполнения или None (HOLD либо игнор).
-        """
+        """Отфильтровать невозможные для long-only действия."""
         if signal is Signal.HOLD:
             return None
         if signal is Signal.ENTER:
             if self.position.is_long:
-                return None  # уже в позиции — не удваиваем
+                return None
             return Signal.ENTER
         if signal is Signal.EXIT:
             if self.position.is_flat:
-                return None  # нечего продавать — не шортим
+                return None
             return Signal.EXIT
         raise ValueError(f'Неизвестный сигнал: {signal!r}')
 
@@ -122,17 +115,6 @@ class StrategySimulator:
         return trade
 
     def _apply_daily_return(self, bar: Bar) -> None:
-        """Начислить perc_income_day на equity, только если позиция LONG.
-
-        Следующий шаг реализации::
-
-            if self.position.is_long:
-                self.equity *= 1.0 + bar.perc_income_day / 100.0
-
-        Сейчас не вызывается из step/run, чтобы можно было отрабатывать сигналы
-        и сделки без имитации готового бэктеста.
-        """
-        raise NotImplementedError(
-            'Начисление дневной доходности пока не реализовано '
-            '(StrategySimulator._apply_daily_return).',
-        )
+        """Начислить perc_income_day на equity, только если позиция LONG."""
+        if self.position.is_long:
+            self.equity *= 1.0 + float(bar.perc_income_day) / 100.0
