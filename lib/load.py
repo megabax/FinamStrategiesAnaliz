@@ -3,17 +3,22 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.keys import Keys # Важный импорт для специальных клавиш
 from selenium.webdriver.support import expected_conditions as EC
 import re
-import time as tm
-from sqlalchemy import func
 from datetime import datetime, timedelta, time
 
 from lib.browser import create_chrome_driver
 from lib.comon_api import fetch_strategy_profit, profit_api_to_db_series
+from lib.rate_limit import (
+    pause_selenium_calc,
+    pause_selenium_day,
+    pause_selenium_page,
+    pause_selenium_retry,
+)
 from lib.save import save_history_record_to_db
 from lib.strategy import StrategyInfo
 from lib.urlutils import extract_date_text, find_start_date_element
 from lib.utils import extract_percentage
 from models.strategies import History
+from sqlalchemy import func
 
 pattern = r"(?:https?:\/\/)?(?:www\.)?comon\.ru\/strategies\/\d+\/"
 
@@ -64,7 +69,7 @@ def get_links_selenium(url, driver=None):
             return [], None
 
         driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-        tm.sleep(1)
+        pause_selenium_page()
 
         pages_count = get_pages_count(driver)
         links = extract_strategy_links(driver)
@@ -77,7 +82,7 @@ def get_links_selenium(url, driver=None):
 
 def get_pages_count(driver):
     driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-    tm.sleep(0.5)
+    pause_selenium_page(scale=0.5)
 
     max_number = 0
 
@@ -221,7 +226,7 @@ def get_summ_perc(driver,last_perc):
     text=None
     count=4
     i=0
-    delay=0.5
+    retry_scale=1.0
     while i<count:
         for button_locator in items:
             try:
@@ -233,10 +238,10 @@ def get_summ_perc(driver,last_perc):
             except Exception as ex:
                 print("Не смогли кликнуть:",i,count,ex)
                 count+=2
-                delay*=1.1
+                retry_scale*=1.1
                 continue
             finally:
-                tm.sleep(delay)
+                pause_selenium_calc(scale=retry_scale)
         items = driver.find_elements(By.ID, 'profit-calc-parameter-header-profit')
         for item in items:
             counter=1
@@ -250,7 +255,7 @@ def get_summ_perc(driver,last_perc):
                         raise Exception(ex)
                     success=False
                     counter+=1
-                    tm.sleep(2)
+                    pause_selenium_retry(scale=retry_scale)
             text=item.text
             if True or perc != last_perc or perc > 0.01:
                 return perc,text.replace("₽", 'руб.')
@@ -275,13 +280,7 @@ def load_strategy_history_from_api(
     """
     end_date_today = datetime.combine(end_date_today.date(), time.min)
 
-    points = fetch_strategy_profit(strategy_number)
-    series = profit_api_to_db_series(points)
-    if not series:
-        raise ValueError(f'API вернул пустую историю для №{strategy_number}')
-
-    strategy_start = datetime.combine(min(series.keys()), time.min)
-
+    next_date = None
     if from_date is not None:
         begin_date = datetime.combine(
             from_date.date() if isinstance(from_date, datetime) else from_date,
@@ -299,16 +298,6 @@ def load_strategy_history_from_api(
             f'{mode_label} (API) strategy_id={strategy_id} за период '
             f'{begin_date:%d.%m.%Y} — {end_date_today:%d.%m.%Y}',
         )
-        if begin_date < strategy_start:
-            print(
-                f'Начало периода скорректировано: {begin_date:%d.%m.%Y} -> '
-                f'{strategy_start:%d.%m.%Y} (дата старта по API)',
-            )
-            begin_date = strategy_start
-        if begin_date >= end_exclusive:
-            print('Пропуск: после корректировки период пуст')
-            return None
-        last_inclusive = end_date_today.date()
     else:
         last_in_db = session.query(func.max(History.datetime)).filter(
             History.strategy_id == strategy_id,
@@ -326,10 +315,29 @@ def load_strategy_history_from_api(
                     f'конечная дата загрузки {end_date_today:%d.%m.%Y}',
                 )
             return None
-
         print(f'Загрузка (API) с {next_date:%d.%m.%Y} для strategy_id={strategy_id}')
-        # Как в Selenium-ветке: end_exclusive = end_date_today (последний день = вчера-1)
         end_exclusive = end_date_today
+
+    points = fetch_strategy_profit(strategy_number)
+    series = profit_api_to_db_series(points)
+    if not series:
+        raise ValueError(f'API вернул пустую историю для №{strategy_number}')
+
+    strategy_start = datetime.combine(min(series.keys()), time.min)
+
+    if from_date is not None:
+        end_exclusive = end_date_today + timedelta(days=1)
+        if begin_date < strategy_start:
+            print(
+                f'Начало периода скорректировано: {begin_date:%d.%m.%Y} -> '
+                f'{strategy_start:%d.%m.%Y} (дата старта по API)',
+            )
+            begin_date = strategy_start
+        if begin_date >= end_exclusive:
+            print('Пропуск: после корректировки период пуст')
+            return None
+        last_inclusive = end_date_today.date()
+    else:
         begin_date = strategy_start
         if next_date > begin_date:
             begin_date = next_date
@@ -355,6 +363,7 @@ def load_strategy_history_from_api(
             perc,
             perc_text,
             replace=replace,
+            session=session,
         )
 
     loaded_begin = datetime.combine(days_to_load[0], time.min)
@@ -462,6 +471,7 @@ def load_strategy_history(
 
     # Переход по указанному URL
     driver.get(url)
+    pause_selenium_page()
 
     date_info = find_start_date_element(driver)
     if date_info is None:
@@ -501,9 +511,12 @@ def load_strategy_history(
             break
         set_period(driver, beg_set_date, end_set_date, x_locator_beg, x_locator_end)
         perc, perc_text = get_summ_perc(driver, last_summ)
-        save_history_record_to_db(strategy_id, beg_set_date, perc, perc_text, replace=replace)
+        save_history_record_to_db(
+            strategy_id, beg_set_date, perc, perc_text, replace=replace, session=session,
+        )
         last_summ = perc
         beg_set_date = end_set_date
+        pause_selenium_day()
 
     loaded_period_end = beg_set_date - timedelta(days=1)
     if loaded_period_end < begin_date:

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
@@ -46,6 +48,17 @@ def env_str(name, default=None):
         return default
     stripped = value.strip()
     return stripped if stripped else default
+
+
+def env_float(name, default: float) -> float:
+    load_env()
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return float(value.strip())
+    except ValueError:
+        return default
 
 
 def get_database_url() -> str:

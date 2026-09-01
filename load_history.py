@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from lib.browser import create_chrome_driver
 from lib.comon_api import probe_profit_api
 from lib.load import load_strategy_history_auto
+from lib.rate_limit import pause_between_strategies
 from lib.save import create_session, delete_strategy_history_period, get_active_strategies
 from lib.verify import MATCH_TOLERANCE, HistoryVerificationError, verify_strategy_history
 from models.strategies import Strategy
@@ -145,7 +146,7 @@ def main():
     driver = create_chrome_driver()
     start_date = datetime.now()
     try:
-        for strategy_row in strategies:
+        for index, strategy_row in enumerate(strategies):
             if args.clear_and_load:
                 deleted = delete_strategy_history_period(
                     session,
@@ -195,6 +196,8 @@ def main():
                     f'depo={result.depo:.6f}, depo_real={result.depo_real:.6f}, '
                     f'diff={result.diff:.6f}, дней={result.days_count}',
                 )
+                if index + 1 < len(strategies):
+                    pause_between_strategies()
             print('Прошло времени', datetime.now() - start_date)
     finally:
         driver.quit()

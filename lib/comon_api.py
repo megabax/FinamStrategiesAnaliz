@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
+from lib.rate_limit import pause_api
+
 import requests
 
 PROFIT_URL = 'https://www.comon.ru/api/v1/strategies/{number}/profit'
@@ -34,6 +36,7 @@ def fetch_strategy_profit(number: int, timeout: float = 60.0) -> list[dict]:
     Каждый элемент: date (str YYYY-MM-DD), value (float), rValue (float, доля за день).
     """
     url = PROFIT_URL.format(number=number)
+    pause_api()
     response = requests.get(url, headers=_headers(number), timeout=timeout)
     response.raise_for_status()
     payload = response.json()

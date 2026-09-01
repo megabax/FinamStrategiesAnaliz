@@ -1,9 +1,13 @@
 import sqlalchemy as sa
 from datetime import datetime
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from lib.env import get_database_name, get_database_url
 from models.strategies import Base, Strategy, Kind, History
+
+_engine = None
+_SessionFactory = None
+
 
 def check_and_create_database(engine, database_name):
     """Проверяет наличие базы данных и создает её, если она не существует."""
@@ -14,9 +18,6 @@ def check_and_create_database(engine, database_name):
         if result.scalar() is None: # <--- Исправлено здесь
             conn.execute(sa.text(f"CREATE DATABASE {database_name}"))
             print(f"База данных '{database_name}' успешно создана.")
-        else:
-            print(f"База данных '{database_name}' уже существует.")
-
     except sa.exc.ProgrammingError as e:
         # This usually means the database does not exist *and* you don't have
         # permission to enumerate databases.  Good luck!
@@ -69,32 +70,46 @@ def delete_strategy_history_period(session, strategy_id, from_date, to_date):
     return deleted
 
 
-def save_history_record_to_db(strategy_id, record_datetime, perc, perc_text, replace=False):
-    session = create_session()
-    if isinstance(record_datetime, datetime):
-        record_date = record_datetime.date()
-    else:
-        record_date = record_datetime
+def save_history_record_to_db(
+    strategy_id,
+    record_datetime,
+    perc,
+    perc_text,
+    replace=False,
+    session=None,
+):
+    own_session = session is None
+    if own_session:
+        session = create_session()
+    try:
+        if isinstance(record_datetime, datetime):
+            record_date = record_datetime.date()
+        else:
+            record_date = record_datetime
 
-    existing_record = session.query(History).filter(
-        History.strategy_id == strategy_id,
-        History.datetime == record_date,
-    ).first()
-    if existing_record:
-        if replace:
-            existing_record.perc_income_day = perc
-            existing_record.perc_text = perc_text
-            session.commit()
-        return
+        existing_record = session.query(History).filter(
+            History.strategy_id == strategy_id,
+            History.datetime == record_date,
+        ).first()
+        if existing_record:
+            if replace:
+                existing_record.perc_income_day = perc
+                existing_record.perc_text = perc_text
+                session.commit()
+            return
 
-    new_record = History(
-        strategy_id=strategy_id,
-        datetime=record_date,
-        perc_income_day=perc,
-        perc_text=perc_text,
-    )
-    session.add(new_record)
-    session.commit()
+        new_record = History(
+            strategy_id=strategy_id,
+            datetime=record_date,
+            perc_income_day=perc,
+            perc_text=perc_text,
+        )
+        session.add(new_record)
+        session.commit()
+    finally:
+        if own_session:
+            session.close()
+
 
 def get_active_strategies(session):
     return session.query(Strategy).filter(Strategy.archived == False).order_by(Strategy.id).all()
@@ -109,15 +124,17 @@ def set_strategy_archived(session, strategy_id, archived=True):
     return strategy
 
 
-def create_session():
-    connection_string = get_database_url()
-    engine = sa.create_engine(connection_string)
-    engine.connect()
-    check_and_create_database(engine, get_database_name(connection_string))
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    return session
+def create_session() -> Session:
+    global _engine, _SessionFactory
+    if _SessionFactory is None:
+        connection_string = get_database_url()
+        _engine = sa.create_engine(connection_string)
+        with _engine.connect():
+            pass
+        check_and_create_database(_engine, get_database_name(connection_string))
+        Base.metadata.create_all(_engine)
+        _SessionFactory = sessionmaker(bind=_engine)
+    return _SessionFactory()
 
 def save_strategies_to_db(links, skip_existing=False):
     session = create_session()

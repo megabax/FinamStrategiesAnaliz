@@ -2,6 +2,7 @@ import argparse
 
 from lib.browser import create_chrome_driver
 from lib.load import get_links_selenium
+from lib.rate_limit import pause_selenium_page
 from lib.save import save_strategies_to_db
 
 
@@ -43,6 +44,7 @@ def main():
             print('Не удалось найти ссылки на этой странице.')
 
         for i in range(2, pages_count + 1):
+            pause_selenium_page()
             print('-------------------- Страница', i, '----------------------------------')
             links, _ = get_links_selenium(f'https://www.comon.ru/strategies/?page={i}', driver=driver)
             if links:
