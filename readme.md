@@ -90,6 +90,15 @@ python analiz/rank.py --from-date 2024-01-01 --to-date 2024-12-31 --top 20
 python analiz/rank.py --sort-by calmar --kind умеренный --output reports/rank_2024.csv
 ```
 
+### Сравнение двух стратегий
+
+```bash
+python analiz/compare.py -n 112741 117907
+python analiz/compare.py -n 112741 117907 -w 100 --overlap-only
+```
+
+Графики дневного % с MA ± STD как в `stathist.py`, плюс CAGR и Sharpe (те же формулы, что в рейтинге).
+
 ### Симулятор входов/выходов
 
 ```bash
@@ -201,6 +210,7 @@ analiz/
   metrics.py      — расчёт метрик по истории
   rank.py           — CLI рейтинга → CSV
   stathist.py       — график дневной доходности (MA ± STD)
+  compare.py        — сравнение двух стратегий: MA/STD, CAGR, Sharpe
 sim/                — симулятор long-only (вход/выход), бэктест MA/STD vs buy&hold
 docs/               — скриншоты рейтинга и графиков для README
 ```
@@ -212,6 +222,7 @@ docs/               — скриншоты рейтинга и графиков 
 | `analiz/metrics.py` + `analiz/rank.py` | Метрики и рейтинг по истории из БД (~1–2 с на 100+ стратегий) |
 | `test.py`, `test_intervals.py`, `lib/verify.py` | Верификация данных (БД vs сайт) |
 | `analiz/stathist.py` | График дневной доходности, MA, полосы ± std |
+| `analiz/compare.py` | Сравнение двух стратегий: графики MA/STD, CAGR, Sharpe |
 | `sim/` | Симулятор long-only: `MaStdThresholdAlgorithm`, CLI `python -m sim.backtest -n …` |
 | `query.sql` | SQL: avg/stdev дневной доходности по стратегиям |
 
