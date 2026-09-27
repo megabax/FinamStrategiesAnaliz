@@ -99,6 +99,24 @@ python analiz/compare.py -n 112741 117907 -w 100 --overlap-only
 
 Графики дневного % с MA ± STD как в `stathist.py`, плюс CAGR и Sharpe (те же формулы, что в рейтинге).
 
+### Прогноз дневной доходности (LSTM)
+
+Обучение на **первой половине** истории (сплошной интервал), проверка на **второй** — следующем по времени отрезке. Нужен `tensorflow`.
+
+```bash
+python analiz/forecast.py -n 112741
+python analiz/forecast.py -n 112741 -w 10 --epochs 50 --no-show
+```
+
+В конце — таблица MAE/RMSE/DirAcc против наивного прогноза, CSV в `reports/` и график факт vs LSTM.
+
+Состояние портфеля на второй половине: рекурсия по n дней (прогноз идёт обратно во вход), затем сброс окна на факт:
+
+```bash
+python analiz/forecast_portfolio.py -n 112741
+python analiz/forecast_portfolio.py -n 112741 -b 5 --no-show
+```
+
 ### Симулятор входов/выходов
 
 ```bash
@@ -200,6 +218,7 @@ lib/
   csv_export.py   — единый формат CSV-отчётов
   env.py          — настройки окружения (.env)
   load.py           — парсинг истории и списка стратегий
+  nnlib.py          — LSTM: хронологический сплит, walk-forward, метрики
   save.py           — операции с БД
   strategy.py       — разбор карточки стратегии
   urlutils.py       — URL, даты, пагинация
@@ -211,6 +230,8 @@ analiz/
   rank.py           — CLI рейтинга → CSV
   stathist.py       — график дневной доходности (MA ± STD)
   compare.py        — сравнение двух стратегий: MA/STD, CAGR, Sharpe
+  forecast.py       — LSTM: обучение на 1-й половине истории, тест на 2-й
+  forecast_portfolio.py — LSTM: рекурсия по n дней, график состояния портфеля
 sim/                — симулятор long-only (вход/выход), бэктест MA/STD vs buy&hold
 docs/               — скриншоты рейтинга и графиков для README
 ```
@@ -223,6 +244,8 @@ docs/               — скриншоты рейтинга и графиков 
 | `test.py`, `test_intervals.py`, `lib/verify.py` | Верификация данных (БД vs сайт) |
 | `analiz/stathist.py` | График дневной доходности, MA, полосы ± std |
 | `analiz/compare.py` | Сравнение двух стратегий: графики MA/STD, CAGR, Sharpe |
+| `analiz/forecast.py` + `lib/nnlib.py` | LSTM-прогноз дневного %: train = 1-я половина, test = следующая |
+| `analiz/forecast_portfolio.py` | LSTM: блоки по n дней (прогноз→вход, затем факт), график портфеля |
 | `sim/` | Симулятор long-only: `MaStdThresholdAlgorithm`, CLI `python -m sim.backtest -n …` |
 | `query.sql` | SQL: avg/stdev дневной доходности по стратегиям |
 
@@ -230,8 +253,7 @@ docs/               — скриншоты рейтинга и графиков 
 
 - взвешенный **score** (комбинация метрик);
 - визуализация equity / drawdown для нескольких стратегий;
-- комиссии / мультистратегийный портфель в `sim/`;
-- прогноз (`lib/nnlib.py` — заготовка LSTM).
+- комиссии / мультистратегийный портфель в `sim/`.
 
 ## Дальнейшее развитие
 
