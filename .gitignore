@@ -92,3 +92,5 @@ info.txt
 *.png
 !docs/*.png
 other/*
+artifacts/*
+artifacts

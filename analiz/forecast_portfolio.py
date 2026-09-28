@@ -22,10 +22,9 @@ from lib.nnlib import (
     DROPOUT,
     EPOCHS,
     LSTM_UNITS,
-    N_STEPS_AHEAD,
+    PORTFOLIO_WINDOW,
     RANDOM_SEED,
     TRAIN_RATIO,
-    WINDOW_SIZE,
     run_lstm_portfolio_forecast,
 )
 from lib.save import create_session
@@ -37,9 +36,9 @@ REPORTS_DIR = Path('reports')
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            'LSTM: обучение на первой половине истории. На второй — рекурсивный прогноз '
-            'изменения на n дней (прогноз подаётся обратно во вход), затем окно '
-            'сбрасывается на факт. На графике — состояние портфеля, не дневной %.'
+            'LSTM: обучение на первой половине. На второй каждый блок из n дней '
+            'предсказывается целиком по фактическому окну (MA/STD/импульс + LSTM). '
+            'На графике — состояние портфеля.'
         ),
     )
     parser.add_argument(
@@ -52,7 +51,7 @@ def parse_args() -> argparse.Namespace:
         '-b', '--block',
         type=int,
         default=BLOCK_DAYS,
-        help=f'Длина рекурсивного блока в днях (по умолчанию {BLOCK_DAYS})',
+        help=f'Длина блока прогноза в днях (по умолчанию {BLOCK_DAYS})',
     )
     parser.add_argument(
         '--train-ratio',
@@ -63,14 +62,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '-w', '--window',
         type=int,
-        default=WINDOW_SIZE,
-        help=f'Длина look-back окна LSTM (по умолчанию {WINDOW_SIZE})',
-    )
-    parser.add_argument(
-        '--horizon',
-        type=int,
-        default=N_STEPS_AHEAD,
-        help='Горизонт обучения модели в днях (шаг прогноза внутри блока — 1 день)',
+        default=PORTFOLIO_WINDOW,
+        help=f'Длина look-back окна LSTM (по умолчанию {PORTFOLIO_WINDOW})',
     )
     parser.add_argument(
         '--epochs',
@@ -166,14 +159,18 @@ def print_report(strategy: Strategy, series: pd.Series, result, args) -> None:
         f'{len(split.test)} дней',
     )
     print(
-        f'Блок={args.block} дн. (рекурсия прогноз→вход, затем сброс на факт), '
+        f'Блок={args.block} дн. (прямой прогноз n дней с фактического окна, затем сброс), '
         f'окно={args.window}, эпохи≤{args.epochs}, блоков={m["blocks"]}',
     )
     print()
-    print('Качество состояния портфеля на тесте (старт блока = факт, внутри блока — прогноз):')
-    print(f'  MAE equity:  {fmt(m["mae"], ".4f")}')
+    print('Качество состояния портфеля на тесте (старт блока = факт):')
+    print(f'  MAE equity:  {fmt(m["mae"], ".4f"):<10} наивный (локальное среднее): {fmt(m["mae_naive"], ".4f")}')
     print(f'  RMSE equity: {fmt(m["rmse"], ".4f")}')
     print(f'  Corr equity: {fmt(m["corr"], ".4f")}')
+    print(
+        f'  Направление блока (рост/падение за n дней): '
+        f'LSTM {fmt(m["block_dir_pct"], ".1f")}%  наивный {fmt(m["block_dir_pct_naive"], ".1f")}%',
+    )
     print(
         f'  Портфель в конце последнего блока: факт {fmt(m["actual_end"], ".4f")}, '
         f'прогноз {fmt(m["predicted_end"], ".4f")} '
@@ -205,14 +202,36 @@ def plot_portfolio(strategy: Strategy, result) -> None:
     plot_actual = [1.0, *result.actual_equity]
     ax.plot(plot_dates, plot_actual, color='black', linewidth=1.8, label='Портфель факт')
 
+    naive_segments_drawn = False
     for idx, (dates, _actual, predicted) in enumerate(iter_block_segments(result)):
         ax.plot(
             dates,
             predicted,
             color='C1',
             linewidth=1.6,
-            label='Портфель LSTM (блоки по n дней)' if idx == 0 else None,
+            label='Портфель LSTM (блок n дней)' if idx == 0 else None,
         )
+
+    if result.naive_equity is not None:
+        n = len(split.test)
+        for i in range(0, n, result.block_days):
+            j = min(i + result.block_days, n)
+            if i == 0:
+                dates = [split.train_to, *split.test.index[i:j]]
+                naive = [1.0, *result.naive_equity[i:j]]
+            else:
+                dates = [split.test.index[i - 1], *split.test.index[i:j]]
+                naive = [result.actual_equity[i - 1], *result.naive_equity[i:j]]
+            ax.plot(
+                dates,
+                naive,
+                color='gray',
+                linestyle='--',
+                linewidth=1.0,
+                alpha=0.85,
+                label='Наивный (локальное среднее)' if not naive_segments_drawn else None,
+            )
+            naive_segments_drawn = True
 
     for i in range(result.block_days, len(split.test), result.block_days):
         ax.axvline(split.test.index[i], color='gray', linestyle=':', alpha=0.5)
@@ -220,7 +239,7 @@ def plot_portfolio(strategy: Strategy, result) -> None:
     ax.axvline(split.test_from, color='black', linestyle='--', linewidth=1, label='Начало теста')
     ax.set_title(
         f'№{strategy.number} {strategy.name}: состояние портфеля, '
-        f'рекурсия по {result.block_days} дн.',
+        f'прогноз блоками по {result.block_days} дн.',
     )
     ax.set_xlabel('Дата')
     ax.set_ylabel('Состояние портфеля (старт теста = 1)')
@@ -235,8 +254,8 @@ def main() -> int:
     if not 0.0 < args.train_ratio < 1.0:
         print('train-ratio должен быть в интервале (0, 1).')
         return 1
-    if args.window < 2 or args.horizon < 1 or args.block < 1:
-        print('window ≥ 2, horizon ≥ 1, block ≥ 1.')
+    if args.window < 2 or args.block < 1:
+        print('window ≥ 2, block ≥ 1.')
         return 1
 
     session = create_session()
@@ -253,7 +272,6 @@ def main() -> int:
             series,
             train_ratio=args.train_ratio,
             window_size=args.window,
-            n_steps_ahead=args.horizon,
             block_days=args.block,
             epochs=args.epochs,
             batch_size=args.batch_size,

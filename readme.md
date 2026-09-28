@@ -110,7 +110,7 @@ python analiz/forecast.py -n 112741 -w 10 --epochs 50 --no-show
 
 В конце — таблица MAE/RMSE/DirAcc против наивного прогноза, CSV в `reports/` и график факт vs LSTM.
 
-Состояние портфеля на второй половине: рекурсия по n дней (прогноз идёт обратно во вход), затем сброс окна на факт:
+Состояние портфеля на второй половине: каждый блок из n дней предсказывается целиком по фактическому окну (MA/STD/импульс), затем сброс на факт:
 
 ```bash
 python analiz/forecast_portfolio.py -n 112741
@@ -245,7 +245,7 @@ docs/               — скриншоты рейтинга и графиков 
 | `analiz/stathist.py` | График дневной доходности, MA, полосы ± std |
 | `analiz/compare.py` | Сравнение двух стратегий: графики MA/STD, CAGR, Sharpe |
 | `analiz/forecast.py` + `lib/nnlib.py` | LSTM-прогноз дневного %: train = 1-я половина, test = следующая |
-| `analiz/forecast_portfolio.py` | LSTM: блоки по n дней (прогноз→вход, затем факт), график портфеля |
+| `analiz/forecast_portfolio.py` | LSTM: блок n дней с фактического окна (MA/STD), график портфеля |
 | `sim/` | Симулятор long-only: `MaStdThresholdAlgorithm`, CLI `python -m sim.backtest -n …` |
 | `query.sql` | SQL: avg/stdev дневной доходности по стратегиям |
 

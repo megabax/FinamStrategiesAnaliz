@@ -8,11 +8,17 @@ import pytest
 
 from lib.nnlib import (
     MinMax1D,
+    StandardScalerND,
     anchored_block_equity,
+    block_direction_pct,
     chronological_split,
+    create_block_sequences,
     create_sequences,
+    direct_block_predict,
     equity_from_returns_pct,
     evaluate_forecast,
+    local_mean_block_predict,
+    make_return_features,
     persistence_forecast,
     recursive_block_predict,
     walk_forward_predict,
@@ -130,3 +136,69 @@ def test_anchored_block_equity_restarts_from_actual():
     )
     np.testing.assert_allclose(actual_eq, [1.1, 1.21, 1.331, 1.4641])
     np.testing.assert_allclose(pred_eq, [1.0, 1.0, 1.21, 1.21])
+
+
+def test_make_return_features_are_causal():
+    idx = pd.date_range('2024-01-01', periods=12, freq='D')
+    r = pd.Series(np.arange(12, dtype=float), index=idx)
+    feat = make_return_features(r, ma_window=3, mom_window=2)
+    assert feat.index.min() == pd.Timestamp('2024-01-03')
+    np.testing.assert_allclose(feat.loc['2024-01-03', 'ma'], (0 + 1 + 2) / 3)
+    np.testing.assert_allclose(feat.loc['2024-01-03', 'mom'], 1 + 2)
+
+
+def test_create_block_sequences_target_starts_after_window():
+    feat = np.arange(10, dtype=float).reshape(-1, 1)
+    tgt = np.arange(10, dtype=float) * 10
+    x, y = create_block_sequences(feat, tgt, window_size=3, block_days=2)
+    np.testing.assert_array_equal(x[0].ravel(), [0, 1, 2])
+    np.testing.assert_array_equal(y[0], [30, 40])
+
+
+def test_direct_block_predict_uses_only_history_before_block():
+    idx = pd.date_range('2024-01-01', periods=8, freq='D')
+    feat = pd.DataFrame({'r': np.arange(8, dtype=float)}, index=idx)
+    scaler = StandardScalerND().fit(feat.iloc[:4].to_numpy())
+    seen = []
+
+    def predict_mean(x: np.ndarray) -> np.ndarray:
+        seen.append(x.copy())
+        raw = scaler.mean[0] + scaler.std[0] * x[0, :, 0]
+        return np.array([[raw[-1], raw[-1]]])
+
+    test_index = idx[4:]
+    preds = direct_block_predict(
+        predict_mean,
+        scaler,
+        feat,
+        test_index,
+        window_size=2,
+        block_days=2,
+    )
+    assert len(preds) == 4
+    last_hist_first_block = feat.loc[feat.index < test_index[0]].iloc[-2:]
+    np.testing.assert_allclose(
+        seen[0][0, :, 0],
+        scaler.transform(last_hist_first_block.to_numpy())[:, 0],
+    )
+    last_hist_second_block = feat.loc[feat.index < test_index[2]].iloc[-2:]
+    np.testing.assert_allclose(
+        seen[1][0, :, 0],
+        scaler.transform(last_hist_second_block.to_numpy())[:, 0],
+    )
+
+
+def test_local_mean_block_uses_actual_lookback():
+    preds = local_mean_block_predict(
+        train_values=[1.0, 3.0],
+        test_values=[10.0, 20.0, 30.0, 40.0],
+        block_days=2,
+        lookback=2,
+    )
+    np.testing.assert_allclose(preds, [2.0, 2.0, 15.0, 15.0])
+
+
+def test_block_direction_pct_counts_sign_of_n_day_move():
+    actual = [1.1, 1.2, 1.0, 0.9]
+    predicted = [1.05, 1.15, 1.3, 1.4]
+    assert block_direction_pct(actual, predicted, block_days=2, start=1.0) == 50.0
