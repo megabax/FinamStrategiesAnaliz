@@ -99,21 +99,21 @@ python analiz/compare.py -n 112741 117907 -w 100 --overlap-only
 
 Графики дневного % с MA ± STD как в `stathist.py`, плюс CAGR и Sharpe (те же формулы, что в рейтинге).
 
-### Прогноз дневной доходности (LSTM)
+### Эксперимент LSTM (не прогноз пути)
 
-Обучение на **первой половине** истории (сплошной интервал), проверка на **второй** — следующем по времени отрезке. Нужен `tensorflow`.
+CLI для проверки гипотезы, что дневной % и траекторию портфеля можно предсказать по своей же истории. Нужен `tensorflow`. **Это не рабочий прогноз:** на тесте направление блока у юаня ~52% (как монетка), корреляция дневного % ≈ 0.03. MAE/corr по equity завышены, потому что каждые n дней линия приклеивается к факту.
+
+Рабочая постановка вместо LSTM-пути — **знак и волатильность** следующего блока, **walk-forward** (расширяющееся окно, не 50/50), сравнение с наивными правилами. TensorFlow не нужен.
 
 ```bash
-python analiz/forecast.py -n 112741
-python analiz/forecast.py -n 112741 -w 10 --epochs 50 --no-show
+python analiz/forecast_signal.py -n 112741
+python analiz/forecast_signal.py -n 112741 -b 10 --no-show
 ```
 
-В конце — таблица MAE/RMSE/DirAcc против наивного прогноза, CSV в `reports/` и график факт vs LSTM.
-
-Состояние портфеля на второй половине: каждый блок из n дней предсказывается целиком по фактическому окну (MA/STD/импульс), затем сброс на факт:
+Успех — направление блока выше наивного (MA / прошлый блок / знак среднего), не совпадение кривых. Старый LSTM оставлен как эксперимент:
 
 ```bash
-python analiz/forecast_portfolio.py -n 112741
+python analiz/forecast.py -n 112741 --no-show
 python analiz/forecast_portfolio.py -n 112741 -b 5 --no-show
 ```
 
@@ -218,7 +218,8 @@ lib/
   csv_export.py   — единый формат CSV-отчётов
   env.py          — настройки окружения (.env)
   load.py           — парсинг истории и списка стратегий
-  nnlib.py          — LSTM: хронологический сплит, walk-forward, метрики
+  nnlib.py          — LSTM (эксперимент): сплит, метрики, не прогноз пути
+  walkforward.py    — знак и vol за n дней, расширяющееся окно
   save.py           — операции с БД
   strategy.py       — разбор карточки стратегии
   urlutils.py       — URL, даты, пагинация
@@ -230,8 +231,9 @@ analiz/
   rank.py           — CLI рейтинга → CSV
   stathist.py       — график дневной доходности (MA ± STD)
   compare.py        — сравнение двух стратегий: MA/STD, CAGR, Sharpe
-  forecast.py       — LSTM: обучение на 1-й половине истории, тест на 2-й
-  forecast_portfolio.py — LSTM: рекурсия по n дней, график состояния портфеля
+  forecast.py       — LSTM-эксперимент: 1-я половина → 2-я, не прогноз пути
+  forecast_portfolio.py — LSTM-эксперимент: блоки n дней vs наивный
+  forecast_signal.py — walk-forward: знак и vol за n дней vs наивный
 sim/                — симулятор long-only (вход/выход), бэктест MA/STD vs buy&hold
 docs/               — скриншоты рейтинга и графиков для README
 ```
@@ -244,8 +246,9 @@ docs/               — скриншоты рейтинга и графиков 
 | `test.py`, `test_intervals.py`, `lib/verify.py` | Верификация данных (БД vs сайт) |
 | `analiz/stathist.py` | График дневной доходности, MA, полосы ± std |
 | `analiz/compare.py` | Сравнение двух стратегий: графики MA/STD, CAGR, Sharpe |
-| `analiz/forecast.py` + `lib/nnlib.py` | LSTM-прогноз дневного %: train = 1-я половина, test = следующая |
-| `analiz/forecast_portfolio.py` | LSTM: блок n дней с фактического окна (MA/STD), график портфеля |
+| `analiz/forecast.py` + `lib/nnlib.py` | Эксперимент LSTM по дневному % (не рабочий прогноз пути) |
+| `analiz/forecast_portfolio.py` | Эксперимент: блоки n дней vs наивный; MAE equity не считать успехом |
+| `analiz/forecast_signal.py` | Walk-forward: знак и волатильность блока vs наивный |
 | `sim/` | Симулятор long-only: `MaStdThresholdAlgorithm`, CLI `python -m sim.backtest -n …` |
 | `query.sql` | SQL: avg/stdev дневной доходности по стратегиям |
 
@@ -253,7 +256,8 @@ docs/               — скриншоты рейтинга и графиков 
 
 - взвешенный **score** (комбинация метрик);
 - визуализация equity / drawdown для нескольких стратегий;
-- комиссии / мультистратегийный портфель в `sim/`.
+- комиссии / мультистратегийный портфель в `sim/`;
+- предсказание **пути** портфеля (LSTM это не умеет). Знак/vol — `forecast_signal.py`.
 
 ## Дальнейшее развитие
 
